@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getUserContext, getAllowedPageIds } from '@/lib/tenant';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
+import { normalizeBilling } from '@/lib/data-quality';
 
 export async function GET() {
   const ctx = await getUserContext();
@@ -17,7 +18,13 @@ export async function GET() {
   const { data, error } = await q;
   if (error) return NextResponse.json({ error: error.message }, { status: 500 });
 
-  const csv = toCsv(data ?? []);
+  // Thêm cột billing đã chuẩn hóa (số thuần) để đối chiếu, giữ nguyên cột billing gốc.
+  const rowsWithNormalized = (data ?? []).map((row) => ({
+    ...row,
+    billing_normalized: normalizeBilling(row.billing),
+  }));
+
+  const csv = toCsv(rowsWithNormalized);
 
   return new NextResponse(csv, {
     headers: {

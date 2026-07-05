@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getUserContext, getAllowedPageIds } from '@/lib/tenant';
-import { getCustomerKpis, getRevenueKpis } from '@/lib/queries';
+import { getDataQualityReport } from '@/lib/queries';
 
-// Cache 60s ở tầng ISR — khớp với lựa chọn "auto-refresh 30s-5 phút".
 export const revalidate = 60;
 
 export async function GET() {
@@ -10,11 +9,7 @@ export async function GET() {
   if (!ctx) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
 
   const pageIds = await getAllowedPageIds(ctx);
+  const report = await getDataQualityReport(pageIds);
 
-  const [customer, revenue] = await Promise.all([
-    getCustomerKpis(pageIds),
-    getRevenueKpis(pageIds),
-  ]);
-
-  return NextResponse.json({ customer, revenue });
+  return NextResponse.json(report);
 }
