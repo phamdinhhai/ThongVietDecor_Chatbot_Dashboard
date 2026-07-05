@@ -294,19 +294,19 @@ as $$
   ),
   enriched as (
     select
-      id as source_id,
-      conversation_id || '::' || coalesce(normalized_phone, '') || '::' || normalized_order || '::' || normalized_billing::text as order_key,
-      name,
-      normalized_phone as phone,
-      address,
-      "order" as products,
-      billing,
-      normalized_billing as billing_amount,
-      notice,
-      conversation_id,
-      coalesce(pt.name, page_id) as page,
-      duplicate_count as merged_rows,
-      id as max_id
+      d.id as source_id,
+      d.conversation_id || '::' || coalesce(d.normalized_phone, '') || '::' || d.normalized_order || '::' || d.normalized_billing::text as order_key,
+      d.name,
+      d.normalized_phone as phone,
+      d.address,
+      d."order" as products,
+      d.billing,
+      d.normalized_billing as billing_amount,
+      d.notice,
+      d.conversation_id,
+      coalesce(pt.name, d.page_id) as page,
+      d.duplicate_count as merged_rows,
+      d.id as max_id
     from deduped d
     left join page_tokens pt on pt.page_id = d.page_id
   ),
