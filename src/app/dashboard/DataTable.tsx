@@ -51,7 +51,6 @@ export function DataTable<T extends Record<string, any>>({
     [endpoint]
   );
 
-  // Debounce tìm kiếm 300ms, và reset về trang 1 mỗi khi từ khoá đổi.
   useEffect(() => {
     const t = setTimeout(() => {
       setPage(0);
@@ -70,20 +69,26 @@ export function DataTable<T extends Record<string, any>>({
   const to = Math.min(total, (page + 1) * PAGE_SIZE);
 
   return (
-    <div className="rounded-lg border border-neutral-200 bg-white">
-      <div className="flex flex-wrap items-center justify-between gap-2 border-b border-neutral-200 p-4">
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder={searchPlaceholder}
-          className="w-full max-w-xs rounded-md border border-neutral-300 px-3 py-1.5 text-sm outline-none focus:border-neutral-500 sm:w-72"
-        />
-        <span className="text-xs text-neutral-400">
+    <div className="card overflow-hidden animate-fade-in">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-surface-200 bg-white p-4">
+        <div className="relative w-full max-w-md">
+          <svg className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-surface-400" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+          </svg>
+          <input
+            id={`search-${endpoint.replace(/[^a-z0-9]/gi, '-')}`}
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder={searchPlaceholder}
+            className="w-full rounded-xl border border-surface-200 bg-surface-50 py-2 pl-9 pr-3 text-sm outline-none transition-colors focus:border-brand-400 focus:bg-white focus:ring-4 focus:ring-brand-100"
+          />
+        </div>
+        <span className="text-xs text-surface-400">
           {errorMsg
             ? errorMsg
             : total > 0
-              ? `${from}-${to} trên ${total.toLocaleString('vi-VN')}`
+              ? `${from}-${to} / ${total.toLocaleString('vi-VN')}`
               : loading
                 ? 'Đang tải...'
                 : '0 kết quả'}
@@ -91,28 +96,35 @@ export function DataTable<T extends Record<string, any>>({
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full text-left text-sm">
-          <thead>
-            <tr className="border-b border-neutral-200 text-xs text-neutral-500">
+        <table className="w-full text-left">
+          <thead className="sticky top-0 z-10 bg-surface-50">
+            <tr className="border-b border-surface-200">
               {columns.map((c) => (
-                <th key={c.key} className="whitespace-nowrap px-4 py-2 font-medium">
+                <th key={c.key} className="data-table-th">
                   {c.label}
                 </th>
               ))}
             </tr>
           </thead>
-          <tbody>
+          <tbody className="divide-y divide-surface-100">
+            {loading && rows.length === 0 && (
+              <tr>
+                <td colSpan={columns.length} className="px-4 py-10 text-center text-sm text-surface-400">
+                  Đang tải dữ liệu...
+                </td>
+              </tr>
+            )}
             {rows.length === 0 && !loading && !errorMsg && (
               <tr>
-                <td colSpan={columns.length} className="px-4 py-8 text-center text-neutral-400">
+                <td colSpan={columns.length} className="px-4 py-10 text-center text-sm text-surface-400">
                   Không có dữ liệu.
                 </td>
               </tr>
             )}
             {rows.map((row, i) => (
-              <tr key={i} className="border-b border-neutral-100 last:border-0 hover:bg-neutral-50">
+              <tr key={i} className="transition-colors hover:bg-brand-50/40">
                 {columns.map((c) => (
-                  <td key={c.key} className="max-w-xs truncate px-4 py-2 text-neutral-700" title={String(row[c.key] ?? '')}>
+                  <td key={c.key} className="data-table-td" title={String(row[c.key] ?? '')}>
                     {c.render ? c.render(row) : (row[c.key] ?? '—')}
                   </td>
                 ))}
@@ -122,21 +134,26 @@ export function DataTable<T extends Record<string, any>>({
         </table>
       </div>
 
-      <div className="flex items-center justify-end gap-2 border-t border-neutral-200 p-3">
-        <button
-          disabled={page === 0 || loading}
-          onClick={() => setPage((p) => Math.max(0, p - 1))}
-          className="rounded-md border border-neutral-300 px-3 py-1 text-xs disabled:opacity-40"
-        >
-          Trước
-        </button>
-        <button
-          disabled={to >= total || loading}
-          onClick={() => setPage((p) => p + 1)}
-          className="rounded-md border border-neutral-300 px-3 py-1 text-xs disabled:opacity-40"
-        >
-          Sau
-        </button>
+      <div className="flex items-center justify-between gap-2 border-t border-surface-200 bg-surface-50 px-4 py-3">
+        <span className="text-xs text-surface-400">Trang {page + 1}</span>
+        <div className="flex gap-2">
+          <button
+            id={`prev-${endpoint.replace(/[^a-z0-9]/gi, '-')}`}
+            disabled={page === 0 || loading}
+            onClick={() => setPage((p) => Math.max(0, p - 1))}
+            className="rounded-lg border border-surface-200 bg-white px-3 py-1.5 text-xs font-medium text-surface-600 transition-colors hover:border-brand-300 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Trước
+          </button>
+          <button
+            id={`next-${endpoint.replace(/[^a-z0-9]/gi, '-')}`}
+            disabled={to >= total || loading}
+            onClick={() => setPage((p) => p + 1)}
+            className="rounded-lg border border-surface-200 bg-white px-3 py-1.5 text-xs font-medium text-surface-600 transition-colors hover:border-brand-300 hover:text-brand-600 disabled:cursor-not-allowed disabled:opacity-40"
+          >
+            Sau
+          </button>
+        </div>
       </div>
     </div>
   );

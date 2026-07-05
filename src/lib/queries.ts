@@ -2,16 +2,12 @@ import { getSupabaseAdmin } from './supabase-admin';
 
 type PageScope = string[] | 'all';
 
-// Các RPC function (xem supabase/migrations/002_kpi_rpc_functions.sql) nhận
-// page_ids text[] với quy ước: NULL = không lọc (super_admin), mảng cụ thể = lọc
-// đúng danh sách page_id được phép xem. Hàm này convert PageScope ở tầng app
-// (định nghĩa trong src/lib/tenant.ts) sang tham số SQL tương ứng.
 function toSqlPageIds(pageIds: PageScope): string[] | null {
   return pageIds === 'all' ? null : pageIds;
 }
 
-// KPI khách hàng: total, tỷ lệ spam, phân bố theo State — tính trong Postgres
-// (get_customer_kpis), không kéo hết bảng customer_data về Node.js để group.
+// ── KPI Cards ──────────────────────────────────────────────────────────────
+
 export async function getCustomerKpis(pageIds: PageScope) {
   const admin = getSupabaseAdmin();
   const { data: rawData, error } = await admin
@@ -31,11 +27,6 @@ export async function getCustomerKpis(pageIds: PageScope) {
   };
 }
 
-// Doanh thu + số đơn thật — get_revenue_kpis() (migration 003) xử lý:
-// 1) gộp nhiều dòng cùng conversation_id + "ID Lọc" thành 1 đơn (nhiều sản phẩm)
-// 2) phát hiện đơn bị "cộng dồn" khi khách thêm món (dòng sau chứa toàn bộ mã sản
-//    phẩm dòng trước, cùng hội thoại) -> chỉ tính đơn mới nhất, không cộng trùng
-// 3) loại dòng trùng y hệt trong cùng 1 đơn (nghi webhook n8n retrigger)
 export async function getRevenueKpis(pageIds: PageScope) {
   const admin = getSupabaseAdmin();
   const { data: rawData, error } = await admin
@@ -53,9 +44,6 @@ export async function getRevenueKpis(pageIds: PageScope) {
   };
 }
 
-// session_count = distinct session_id thật trong Postgres (fb_chats mỗi dòng là
-// 1 tin nhắn, không phải 1 hội thoại). order_count dùng lại cùng logic gộp đơn
-// ở get_revenue_kpis() để 2 chỗ luôn khớp nhau.
 export async function getConversionRate(pageIds: PageScope) {
   const admin = getSupabaseAdmin();
   const { data: rawData, error } = await admin
@@ -68,5 +56,46 @@ export async function getConversionRate(pageIds: PageScope) {
     sessionCount: Number(data.session_count ?? 0),
     orderCount: Number(data.order_count ?? 0),
     rate: Number(data.rate ?? 0),
+  };
+}
+
+// ── Analytics ──────────────────────────────────────────────────────────────
+
+export type ChartPoint = { label: string; value: number };
+
+export type AnalyticsData = {
+  chatByDay: ChartPoint[];
+  chatByHour: ChartPoint[];
+  chatByWeekday: ChartPoint[];
+  topProducts: ChartPoint[];
+  quality: {
+    zeroBillingCount: number;
+    missingIdLocCount: number;
+    missingPhoneCount: number;
+  };
+};
+
+export async function getDashboardAnalytics(pageIds: PageScope): Promise<AnalyticsData> {
+  const admin = getSupabaseAdmin();
+  const { data: rawData, error } = await admin
+    .rpc('get_dashboard_analytics', { p_page_ids: toSqlPageIds(pageIds) })
+    .single();
+  if (error) throw error;
+  const data = rawData as any;
+
+  const parsePoints = (arr: any[]): ChartPoint[] =>
+    (arr ?? []).map((r: any) => ({ label: String(r.label), value: Number(r.value) }));
+
+  const q = data.quality ?? {};
+  return {
+    chatByDay: parsePoints(data.chatByDay),
+    chatByHour: parsePoints(data.chatByHour),
+    chatByWeekday: parsePoints(data.chatByWeekday),
+    topProducts: parsePoints(data.topProducts),
+    quality: {
+      zeroBillingCount: Number(q.zero_billing_count ?? 0),
+      missingIdLocCount: Number(q.missing_id_loc_count ?? 0),
+      missingPhoneCount: Number(q.missing_phone_count ?? 0),
+    },
   };
 }

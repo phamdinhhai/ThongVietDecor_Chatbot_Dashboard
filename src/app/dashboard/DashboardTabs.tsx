@@ -5,61 +5,90 @@ import { DashboardClient, type Kpis } from './DashboardClient';
 import { DataTable, type ColumnDef } from './DataTable';
 
 type CustomerRow = {
-  ten: string;
-  customer_label: string | null;
-  facebook_label: string | null;
-  state: number | null;
-  spam_mark: string | null;
-  notice: string | null;
-  page_id: string | null;
+  id: number;
+  session_id: string;
+  name: string | null;
+  phone: string | null;
+  page: string | null;
+  status: 'Đã mua hàng' | 'Chưa mua hàng' | string;
+  first_message: string | null;
+  last_message: string | null;
 };
 
 type OrderRow = {
-  name: string;
+  order_key: string;
+  name: string | null;
   phone: string | null;
   address: string | null;
-  order: string | null;
+  products: string | null;
   billing: string | null;
+  billing_amount: number | null;
   notice: string | null;
   conversation_id: string | null;
-  id_loc: string | null;
-  page_id: string | null;
+  page: string | null;
+  merged_rows: number;
 };
 
-// "Page" chỉ hiện với super_admin — tenant thường chỉ thấy đúng page của mình nên cột
-// này thừa/gây rối, chỉ có ích khi xem gộp nhiều tenant.
-function withPageColumn<T extends { page_id: string | null }>(
-  columns: ColumnDef<T>[],
-  show: boolean
-): ColumnDef<T>[] {
+function formatDate(value: string | null): string {
+  if (!value) return '—';
+  return new Date(value).toLocaleString('vi-VN', {
+    day: '2-digit',
+    month: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+function formatVnd(value: number | null): string {
+  if (!value || value <= 0) return '—';
+  return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(value);
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const bought = status === 'Đã mua hàng';
+  return <span className={`badge ${bought ? 'badge-success' : 'badge-neutral'}`}>{status}</span>;
+}
+
+function withPageColumn<T extends { page: string | null }>(columns: ColumnDef<T>[], show: boolean): ColumnDef<T>[] {
   if (!show) return columns;
-  return [...columns, { key: 'page_id', label: 'Page' }];
+  return [...columns, { key: 'page', label: 'Page', render: (row) => <span className="badge badge-brand">{row.page ?? '—'}</span> }];
 }
 
 const CUSTOMER_BASE_COLUMNS: ColumnDef<CustomerRow>[] = [
-  { key: 'ten', label: 'Tên' },
-  { key: 'customer_label', label: 'Nhãn KH' },
-  { key: 'facebook_label', label: 'Nhãn Facebook' },
-  { key: 'state', label: 'Trạng thái' },
-  { key: 'spam_mark', label: 'Spam', render: (row) => (row.spam_mark ? 'Có' : '—') },
-  { key: 'notice', label: 'Ghi chú' },
+  { key: 'id', label: 'ID' },
+  { key: 'session_id', label: 'Session ID' },
+  { key: 'name', label: 'Tên' },
+  { key: 'phone', label: 'SĐT', render: (row) => row.phone ?? <span className="text-surface-300">null</span> },
+  { key: 'status', label: 'Trạng thái', render: (row) => <StatusBadge status={row.status} /> },
+  { key: 'first_message', label: 'Lần đầu nhắn', render: (row) => formatDate(row.first_message) },
+  { key: 'last_message', label: 'Lần cuối nhắn', render: (row) => formatDate(row.last_message) },
 ];
 
 const ORDER_BASE_COLUMNS: ColumnDef<OrderRow>[] = [
   { key: 'name', label: 'Tên khách' },
   { key: 'phone', label: 'SĐT' },
   { key: 'address', label: 'Địa chỉ' },
-  { key: 'order', label: 'Sản phẩm' },
-  { key: 'billing', label: 'Giá trị' },
+  { key: 'products', label: 'Sản phẩm' },
+  {
+    key: 'billing_amount',
+    label: 'Giá trị',
+    render: (row) => row.billing_amount && row.billing_amount > 0
+      ? <span className="font-semibold text-emerald-700">{formatVnd(row.billing_amount)}</span>
+      : <span className="badge badge-warning">{row.billing ?? 'Cần kiểm tra'}</span>,
+  },
   { key: 'notice', label: 'Ghi chú' },
-  { key: 'conversation_id', label: 'Conversation ID' },
-  { key: 'id_loc', label: 'ID Lọc' },
+  {
+    key: 'merged_rows',
+    label: 'Gộp',
+    render: (row) => row.merged_rows > 1 ? <span className="badge badge-warning">{row.merged_rows} dòng</span> : '—',
+  },
+  { key: 'conversation_id', label: 'Hội thoại' },
 ];
 
 const TABS = [
-  { key: 'overview', label: 'Tổng quan' },
-  { key: 'customers', label: 'Khách hàng' },
-  { key: 'orders', label: 'Đơn hàng' },
+  { key: 'overview', label: 'Tổng quan', icon: '📊' },
+  { key: 'customers', label: 'Khách hàng', icon: '👥' },
+  { key: 'orders', label: 'Đơn hàng', icon: '🛍️' },
 ] as const;
 
 type TabKey = (typeof TABS)[number]['key'];
@@ -75,40 +104,54 @@ export function DashboardTabs({
 
   return (
     <>
-      <div className="mb-6 flex gap-1 border-b border-neutral-200">
+      <nav className="mb-6 flex gap-1 border-b border-surface-200">
         {TABS.map((t) => (
           <button
+            id={`tab-${t.key}`}
             key={t.key}
             onClick={() => setTab(t.key)}
-            className={`-mb-px border-b-2 px-3 py-2 text-sm font-medium transition-colors ${
-              tab === t.key
-                ? 'border-neutral-900 text-neutral-900'
-                : 'border-transparent text-neutral-400 hover:text-neutral-600'
-            }`}
+            className={`tab-btn ${tab === t.key ? 'tab-btn-active' : 'tab-btn-inactive'}`}
           >
+            <span className="mr-2">{t.icon}</span>
             {t.label}
           </button>
         ))}
-      </div>
+      </nav>
 
       {tab === 'overview' && <DashboardClient initialData={initialData} />}
 
       {tab === 'customers' && (
-        <DataTable<CustomerRow>
-          key="customers"
-          endpoint="/api/table/customers"
-          columns={withPageColumn(CUSTOMER_BASE_COLUMNS, showPageColumn)}
-          searchPlaceholder="Tìm theo tên, nhãn khách, nhãn Facebook..."
-        />
+        <section className="space-y-4 animate-slide-up">
+          <div>
+            <h2 className="text-lg font-semibold text-surface-900">Danh sách khách đã nhắn</h2>
+            <p className="mt-1 text-sm text-surface-500">
+              Dedup theo Customer ID, lấy số điện thoại từ order_list và thời điểm nhắn từ fb_chats.
+            </p>
+          </div>
+          <DataTable<CustomerRow>
+            key="customers"
+            endpoint="/api/table/customers"
+            columns={withPageColumn(CUSTOMER_BASE_COLUMNS, showPageColumn)}
+            searchPlaceholder="Tìm theo tên, session, SĐT, page..."
+          />
+        </section>
       )}
 
       {tab === 'orders' && (
-        <DataTable<OrderRow>
-          key="orders"
-          endpoint="/api/table/orders"
-          columns={withPageColumn(ORDER_BASE_COLUMNS, showPageColumn)}
-          searchPlaceholder="Tìm theo tên, SĐT, sản phẩm..."
-        />
+        <section className="space-y-4 animate-slide-up">
+          <div>
+            <h2 className="text-lg font-semibold text-surface-900">Danh sách đơn hàng</h2>
+            <p className="mt-1 text-sm text-surface-500">
+              Gộp đơn theo conversation + ID Lọc, chuẩn hoá số điện thoại và giá trị đơn.
+            </p>
+          </div>
+          <DataTable<OrderRow>
+            key="orders"
+            endpoint="/api/table/orders"
+            columns={withPageColumn(ORDER_BASE_COLUMNS, showPageColumn)}
+            searchPlaceholder="Tìm theo tên, SĐT, sản phẩm, page..."
+          />
+        </section>
       )}
     </>
   );
