@@ -158,6 +158,8 @@ as $$
   );
 $$;
 
+drop function if exists get_customer_list_v2(text[], text, integer, integer);
+
 create or replace function get_customer_list_v2(
   p_page_ids text[],
   p_search text default '',
@@ -238,6 +240,8 @@ as $$
   offset greatest(p_offset, 0)
   limit least(greatest(p_limit, 1), 100);
 $$;
+
+drop function if exists get_order_list_v2(text[], text, integer, integer);
 
 create or replace function get_order_list_v2(
   p_page_ids text[],
