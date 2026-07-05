@@ -81,11 +81,6 @@ const ORDER_BASE_COLUMNS: ColumnDef<OrderRow>[] = [
       : <span className="badge badge-warning">{row.billing ?? 'Cần kiểm tra'}</span>,
   },
   { key: 'notice', label: 'Ghi chú' },
-  {
-    key: 'merged_rows',
-    label: 'Dòng trùng',
-    render: (row) => row.merged_rows > 1 ? <span className="badge badge-warning">Đã gộp {row.merged_rows}</span> : '—',
-  },
   { key: 'conversation_id', label: 'Hội thoại' },
 ];
 
