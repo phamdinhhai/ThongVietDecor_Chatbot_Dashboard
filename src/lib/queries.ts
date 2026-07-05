@@ -1,145 +1,72 @@
 import { getSupabaseAdmin } from './supabase-admin';
-import {
-  normalizeBilling,
-  findDuplicateCustomers,
-  groupOrders,
-  type CustomerRow,
-  type OrderRow,
-} from './data-quality';
 
 type PageScope = string[] | 'all';
 
-// Áp filter page_id lên 1 query. column mặc định là "page_id" (đúng với order_list,
-// page_tokens). customer_data dùng tên cột khác ("Page id") nên truyền riêng.
-function applyPageFilter(query: any, pageIds: PageScope, column = 'page_id') {
-  if (pageIds === 'all') return query;
-  if (pageIds.length === 0) return query.eq(column, '__none__'); // tenant chưa gán page nào -> rỗng
-  return query.in(column, pageIds);
+// Các RPC function (xem supabase/migrations/002_kpi_rpc_functions.sql) nhận
+// page_ids text[] với quy ước: NULL = không lọc (super_admin), mảng cụ thể = lọc
+// đúng danh sách page_id được phép xem. Hàm này convert PageScope ở tầng app
+// (định nghĩa trong src/lib/tenant.ts) sang tham số SQL tương ứng.
+function toSqlPageIds(pageIds: PageScope): string[] | null {
+  return pageIds === 'all' ? null : pageIds;
 }
 
-// ---------- KHÁCH HÀNG ----------
-// Dữ liệu thật: nhóm theo (Customer id, Page id) có 100/412 dòng trùng lặp hoàn toàn.
-// "Tổng khách hàng" phải tính theo số nhóm unique, không phải số dòng thô.
+// KPI khách hàng: total, tỷ lệ spam, phân bố theo State — tính trong Postgres
+// (get_customer_kpis), không kéo hết bảng customer_data về Node.js để group.
 export async function getCustomerKpis(pageIds: PageScope) {
   const admin = getSupabaseAdmin();
-  let q = admin
-    .from('customer_data')
-    .select('id, State, spam_mark, "Customer id", "Page id"');
-  q = applyPageFilter(q, pageIds, 'Page id');
-
-  const { data, error } = await q;
+  const { data: rawData, error } = await admin
+    .rpc('get_customer_kpis', { p_page_ids: toSqlPageIds(pageIds) })
+    .single();
   if (error) throw error;
+  const data = rawData as any;
 
-  const rows = (data ?? []) as CustomerRow[];
-  const { uniqueCount, duplicateGroups } = findDuplicateCustomers(rows);
-
-  // spam_mark là 1 CON SỐ ĐẾM (quan sát thấy giá trị 1-27), không phải cờ boolean —
-  // chưa có ngưỡng nghiệp vụ nào xác định "bao nhiêu thì tính là spam", nên KHÔNG suy ra
-  // tỷ lệ % spam ở đây để tránh gây hiểu lầm. Chỉ hiển thị số liệu thô + trung bình,
-  // bạn cung cấp ngưỡng cụ thể (nếu có) để bổ sung "tỷ lệ spam" chính xác sau.
-  const spamValues = rows.map((r) => r.spam_mark).filter((v) => v != null) as number[];
-  const avgSpamMark = spamValues.length
-    ? spamValues.reduce((a, b) => a + b, 0) / spamValues.length
-    : 0;
-
-  const stateBreakdown = groupBy(rows, 'State');
+  const total = Number(data.total ?? 0);
+  const spamCount = Number(data.spam_count ?? 0);
 
   return {
-    totalRows: rows.length,
-    uniqueCount,
-    duplicateRowCount: rows.length - uniqueCount,
-    duplicateGroupCount: duplicateGroups.length,
-    avgSpamMark,
-    stateBreakdown,
+    total,
+    spamCount,
+    spamRate: total ? spamCount / total : 0,
+    stateBreakdown: (data.state_breakdown ?? {}) as Record<string, number>,
   };
 }
 
-// ---------- ĐƠN HÀNG / DOANH THU ----------
-// Một đơn hàng thật có thể chiếm NHIỀU dòng (nhiều sản phẩm), nhận biết qua cùng
-// conversation_id + cùng "ID Lọc". Dòng thiếu "ID Lọc" không gộp an toàn -> tính riêng,
-// đánh dấu "cần xác minh". Xem lib/data-quality.ts để biết cơ sở của rule này.
-async function getOrderRows(pageIds: PageScope): Promise<OrderRow[]> {
-  const admin = getSupabaseAdmin();
-  let q = admin
-    .from('order_list')
-    .select('id, billing, conversation_id, "ID Lọc", phone, page_id');
-  q = applyPageFilter(q, pageIds);
-
-  const { data, error } = await q;
-  if (error) throw error;
-  return (data ?? []) as OrderRow[];
-}
-
+// Doanh thu + số đơn thật — get_revenue_kpis() (migration 003) xử lý:
+// 1) gộp nhiều dòng cùng conversation_id + "ID Lọc" thành 1 đơn (nhiều sản phẩm)
+// 2) phát hiện đơn bị "cộng dồn" khi khách thêm món (dòng sau chứa toàn bộ mã sản
+//    phẩm dòng trước, cùng hội thoại) -> chỉ tính đơn mới nhất, không cộng trùng
+// 3) loại dòng trùng y hệt trong cùng 1 đơn (nghi webhook n8n retrigger)
 export async function getRevenueKpis(pageIds: PageScope) {
-  const rows = await getOrderRows(pageIds);
-  const totalRevenue = rows.reduce((sum, r) => sum + normalizeBilling(r.billing), 0);
-  const { confirmedOrderCount, unverifiedRows, totalOrders } = groupOrders(rows);
-
-  return {
-    totalRevenue,
-    totalOrders,
-    confirmedOrders: confirmedOrderCount,
-    unverifiedRowCount: unverifiedRows.length,
-  };
-}
-
-// ---------- DATA QUALITY REPORT ----------
-// Dùng cho phần "Chất lượng dữ liệu" trên dashboard — tổng hợp trùng lặp + lỗi định dạng.
-export async function getDataQualityReport(pageIds: PageScope) {
   const admin = getSupabaseAdmin();
-
-  let custQ = admin
-    .from('customer_data')
-    .select('id, "Customer id", "Page id"');
-  custQ = applyPageFilter(custQ, pageIds, 'Page id');
-  const { data: custData, error: custErr } = await custQ;
-  if (custErr) throw custErr;
-
-  const orderRows = await getOrderRows(pageIds);
-  const customerRows = (custData ?? []) as CustomerRow[];
-
-  const { duplicateGroups, duplicateRowCount, uniqueCount } = findDuplicateCustomers(customerRows);
-  const { unverifiedRows } = groupOrders(orderRows);
-
-  const phoneIssues = orderRows.filter((r) => !isValidPhoneQuick(r.phone ?? null));
-  const billingIssues = orderRows.filter((r) => normalizeBilling(r.billing) === 0);
-
-  return {
-    customer: {
-      totalRows: customerRows.length,
-      uniqueCount,
-      duplicateRowCount,
-      duplicateGroupCount: duplicateGroups.length,
-      sampleDuplicates: duplicateGroups.slice(0, 5), // vài ví dụ để kiểm tra nhanh
-    },
-    order: {
-      totalRows: orderRows.length,
-      unverifiedRowCount: unverifiedRows.length,
-      phoneFormatIssueCount: phoneIssues.length,
-      billingFormatIssueCount: billingIssues.length,
-    },
-  };
-}
-
-function isValidPhoneQuick(raw: string | null): boolean {
-  if (!raw) return false;
-  return /^0\d{9}$/.test(raw.replace(/[^\d]/g, ''));
-}
-
-// ---------- PAGE DIRECTORY ----------
-// page_tokens chứa access token Facebook THẬT (bí mật) — tuyệt đối không select cột `token`
-// ở bất kỳ đâu trong app. Chỉ dùng page_id/name để hiển thị tên trang cho admin.
-export async function getPageDirectory() {
-  const admin = getSupabaseAdmin();
-  const { data, error } = await admin.from('page_tokens').select('page_id, platform, name');
+  const { data: rawData, error } = await admin
+    .rpc('get_revenue_kpis', { p_page_ids: toSqlPageIds(pageIds) })
+    .single();
   if (error) throw error;
-  return data ?? [];
+  const data = rawData as any;
+
+  return {
+    totalOrders: Number(data.total_orders ?? 0),
+    totalRevenue: Number(data.total_revenue ?? 0),
+    ordersNeedingVerification: Number(data.orders_needing_verification ?? 0),
+    ordersCollapsedAsRevision: Number(data.orders_collapsed_as_revision ?? 0),
+    duplicateRowsRemoved: Number(data.duplicate_rows_removed ?? 0),
+  };
 }
 
-function groupBy<T extends Record<string, any>>(rows: T[], key: keyof T) {
-  return rows.reduce((acc, row) => {
-    const k = String(row[key] ?? 'unknown');
-    acc[k] = (acc[k] ?? 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
+// session_count = distinct session_id thật trong Postgres (fb_chats mỗi dòng là
+// 1 tin nhắn, không phải 1 hội thoại). order_count dùng lại cùng logic gộp đơn
+// ở get_revenue_kpis() để 2 chỗ luôn khớp nhau.
+export async function getConversionRate(pageIds: PageScope) {
+  const admin = getSupabaseAdmin();
+  const { data: rawData, error } = await admin
+    .rpc('get_conversion_rate', { p_page_ids: toSqlPageIds(pageIds) })
+    .single();
+  if (error) throw error;
+  const data = rawData as any;
+
+  return {
+    sessionCount: Number(data.session_count ?? 0),
+    orderCount: Number(data.order_count ?? 0),
+    rate: Number(data.rate ?? 0),
+  };
 }

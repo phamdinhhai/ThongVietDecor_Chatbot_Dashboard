@@ -41,30 +41,41 @@ alter table dashboard_users enable row level security;
 
 
 -- ============================================================
--- INDEX cho 3 bảng trọng tâm — cả 3 đã CÓ SẴN cột page_id/"Page id" thật
--- (đã xác nhận qua dữ liệu mẫu thật), không cần tách/tính lại từ chuỗi.
+-- CỘT page_id TÍNH SẴN cho các bảng chỉ có session_id / conversation_id
+-- dạng "{end_user_id}_{page_id}". page_id = phần SAU dấu "_" cuối cùng.
+--
+-- ⚠️ XÁC NHẬN TRƯỚC KHI CHẠY TRÊN PRODUCTION:
+--   - Kiểm tra vài dòng thật để chắc mỗi giá trị có ít nhất 1 dấu "_"
+--   - Kiểm tra order_list.conversation_id có cùng format với fb_chats.session_id
+--     (giả định hiện tại: có, vì trước đây đã join 2 cột này để dedup đơn hàng)
 -- ============================================================
 
-create index if not exists idx_customer_data_page_id on customer_data("Page id");
+alter table fb_chats add column if not exists page_id text
+  generated always as (
+    split_part(session_id, '_', array_length(string_to_array(session_id, '_'), 1))
+  ) stored;
+create index if not exists idx_fb_chats_page_id on fb_chats(page_id);
+
+alter table image_store add column if not exists page_id text
+  generated always as (
+    split_part("sessionID", '_', array_length(string_to_array("sessionID", '_'), 1))
+  ) stored;
+create index if not exists idx_image_store_page_id on image_store(page_id);
+
+alter table workflow_query add column if not exists page_id text
+  generated always as (
+    split_part(session_id, '_', array_length(string_to_array(session_id, '_'), 1))
+  ) stored;
+create index if not exists idx_workflow_query_page_id on workflow_query(page_id);
+
+alter table order_list add column if not exists page_id text
+  generated always as (
+    split_part(conversation_id, '_', array_length(string_to_array(conversation_id, '_'), 1))
+  ) stored;
 create index if not exists idx_order_list_page_id on order_list(page_id);
-create index if not exists idx_page_tokens_page_id on page_tokens(page_id);
 
--- Dùng cho dedup khách hàng (xem lib/data-quality.ts): 1 khách = 1 cặp (Customer id, Page id).
-create index if not exists idx_customer_data_dedupe_key on customer_data("Customer id", "Page id");
-
-
--- ============================================================
--- PHẦN TÙY CHỌN (chưa có dữ liệu mẫu thật để xác nhận) — chỉ chạy nếu bạn
--- xác nhận fb_chats / image_store / workflow_query CHƯA có cột page_id sẵn
--- và giá trị session_id/sessionID có dạng "{end_user_id}_{page_id}".
--- Hiện KHÔNG dùng trong queries.ts vì ngoài phạm vi ưu tiên (customer/order/page_tokens).
--- ============================================================
-
--- alter table fb_chats add column if not exists page_id text
---   generated always as (
---     split_part(session_id, '_', array_length(string_to_array(session_id, '_'), 1))
---   ) stored;
--- create index if not exists idx_fb_chats_page_id on fb_chats(page_id);
+-- customer_data đã có cột "Page id" sẵn, chỉ cần index.
+create index if not exists idx_customer_data_page_id on customer_data("Page id");
 
 
 -- ============================================================

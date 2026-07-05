@@ -4,62 +4,50 @@ import { useEffect, useState } from 'react';
 import { KpiCard } from './KpiCard';
 import { StateBreakdownChart } from './StateBreakdownChart';
 
-type Kpis = {
-  customer: {
-    totalRows: number;
-    uniqueCount: number;
-    duplicateRowCount: number;
-    duplicateGroupCount: number;
-    avgSpamMark: number;
-    stateBreakdown: Record<string, number>;
-  };
+export type Kpis = {
+  customer: { total: number; spamCount: number; spamRate: number; stateBreakdown: Record<string, number> };
   revenue: {
-    totalRevenue: number;
     totalOrders: number;
-    confirmedOrders: number;
-    unverifiedRowCount: number;
+    totalRevenue: number;
+    ordersNeedingVerification: number;
+    ordersCollapsedAsRevision: number;
+    duplicateRowsRemoved: number;
   };
+  conversion: { sessionCount: number; orderCount: number; rate: number };
 };
 
-type DataQuality = {
-  customer: {
-    totalRows: number;
-    uniqueCount: number;
-    duplicateRowCount: number;
-    duplicateGroupCount: number;
-    sampleDuplicates: { customerId: string; pageId: string; rowIds: number[]; keptRowId: number }[];
-  };
-  order: {
-    totalRows: number;
-    unverifiedRowCount: number;
-    phoneFormatIssueCount: number;
-    billingFormatIssueCount: number;
-  };
-};
+const REFRESH_MS = 60_000; // 60s — nằm trong khoảng 30s-5 phút đã chọn, chỉnh nếu cần
 
-const REFRESH_MS = 60_000; // 60s — trong khoảng 30s-5 phút đã chọn
+function orderHint(revenue: Kpis['revenue']): string | undefined {
+  const parts: string[] = [];
+  if (revenue.ordersNeedingVerification > 0) {
+    parts.push(`${revenue.ordersNeedingVerification.toLocaleString('vi-VN')} cần xác minh (ID Lọc rỗng)`);
+  }
+  if (revenue.ordersCollapsedAsRevision > 0) {
+    parts.push(`${revenue.ordersCollapsedAsRevision.toLocaleString('vi-VN')} đã gộp do sửa đơn`);
+  }
+  if (revenue.duplicateRowsRemoved > 0) {
+    parts.push(`${revenue.duplicateRowsRemoved.toLocaleString('vi-VN')} dòng trùng đã loại`);
+  }
+  return parts.length ? parts.join(' · ') : undefined;
+}
 
 export function DashboardClient({ initialData }: { initialData: Kpis }) {
   const [data, setData] = useState<Kpis>(initialData);
-  const [quality, setQuality] = useState<DataQuality | null>(null);
   const [lastUpdated, setLastUpdated] = useState(new Date());
 
   useEffect(() => {
-    async function refresh() {
+    const interval = setInterval(async () => {
       try {
-        const [kpisRes, qualityRes] = await Promise.all([
-          fetch('/api/kpis', { cache: 'no-store' }),
-          fetch('/api/data-quality', { cache: 'no-store' }),
-        ]);
-        if (kpisRes.ok) setData(await kpisRes.json());
-        if (qualityRes.ok) setQuality(await qualityRes.json());
+        const res = await fetch('/api/kpis', { cache: 'no-store' });
+        if (!res.ok) return;
+        const json = await res.json();
+        setData(json);
         setLastUpdated(new Date());
       } catch {
         // Bỏ qua lỗi 1 lần refresh, thử lại ở chu kỳ tiếp theo.
       }
-    }
-    refresh();
-    const interval = setInterval(refresh, REFRESH_MS);
+    }, REFRESH_MS);
     return () => clearInterval(interval);
   }, []);
 
@@ -78,56 +66,35 @@ export function DashboardClient({ initialData }: { initialData: Kpis }) {
       </div>
 
       <section className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiCard label="Tổng khách hàng" value={data.customer.total.toLocaleString('vi-VN')} />
         <KpiCard
-          label="Khách hàng (đã khử trùng)"
-          value={data.customer.uniqueCount.toLocaleString('vi-VN')}
-          hint={`${data.customer.totalRows.toLocaleString('vi-VN')} dòng thô, ${data.customer.duplicateRowCount} dòng trùng`}
+          label="Tỷ lệ spam"
+          value={`${(data.customer.spamRate * 100).toFixed(1)}%`}
+          hint={`${data.customer.spamCount.toLocaleString('vi-VN')} khách`}
         />
         <KpiCard
           label="Tổng đơn hàng"
           value={data.revenue.totalOrders.toLocaleString('vi-VN')}
-          hint={`${data.revenue.confirmedOrders} xác nhận, ${data.revenue.unverifiedRowCount} cần kiểm tra`}
+          hint={orderHint(data.revenue)}
         />
         <KpiCard label="Doanh thu" value={`${data.revenue.totalRevenue.toLocaleString('vi-VN')}đ`} />
-        <KpiCard
-          label="spam_mark trung bình"
-          value={data.customer.avgSpamMark.toFixed(1)}
-          hint="Chưa có ngưỡng phân loại spam"
-        />
       </section>
 
-      <section className="mb-8 grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <div className="rounded-lg border border-neutral-200 bg-white p-4">
-          <h2 className="mb-4 text-sm font-medium text-neutral-700">Phân bố trạng thái khách hàng (State)</h2>
+          <h2 className="mb-4 text-sm font-medium text-neutral-700">Phân bố trạng thái khách hàng</h2>
           <StateBreakdownChart data={data.customer.stateBreakdown} />
         </div>
 
         <div className="rounded-lg border border-neutral-200 bg-white p-4">
-          <h2 className="mb-4 text-sm font-medium text-neutral-700">Chất lượng dữ liệu</h2>
-          {!quality ? (
-            <p className="text-sm text-neutral-400">Đang tải...</p>
-          ) : (
-            <ul className="space-y-2 text-sm">
-              <li className="flex justify-between">
-                <span className="text-neutral-500">Khách hàng trùng lặp</span>
-                <span className="font-medium text-neutral-900">
-                  {quality.customer.duplicateGroupCount} nhóm ({quality.customer.duplicateRowCount} dòng thừa)
-                </span>
-              </li>
-              <li className="flex justify-between">
-                <span className="text-neutral-500">Đơn hàng thiếu &quot;ID Lọc&quot;</span>
-                <span className="font-medium text-neutral-900">{quality.order.unverifiedRowCount} dòng</span>
-              </li>
-              <li className="flex justify-between">
-                <span className="text-neutral-500">Số điện thoại sai định dạng</span>
-                <span className="font-medium text-neutral-900">{quality.order.phoneFormatIssueCount} dòng</span>
-              </li>
-              <li className="flex justify-between">
-                <span className="text-neutral-500">Billing không parse được</span>
-                <span className="font-medium text-neutral-900">{quality.order.billingFormatIssueCount} dòng</span>
-              </li>
-            </ul>
-          )}
+          <h2 className="mb-4 text-sm font-medium text-neutral-700">Tỷ lệ chuyển đổi</h2>
+          <p className="text-3xl font-medium text-neutral-900">
+            {(data.conversion.rate * 100).toFixed(1)}%
+          </p>
+          <p className="mt-1 text-sm text-neutral-500">
+            {data.conversion.orderCount.toLocaleString('vi-VN')} đơn /{' '}
+            {data.conversion.sessionCount.toLocaleString('vi-VN')} hội thoại
+          </p>
         </div>
       </section>
     </>

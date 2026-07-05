@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server';
 import { getUserContext, getAllowedPageIds } from '@/lib/tenant';
-import { getCustomerKpis, getRevenueKpis } from '@/lib/queries';
+import { getCustomerKpis, getRevenueKpis, getConversionRate } from '@/lib/queries';
 
 // Cache 60s ở tầng ISR — khớp với lựa chọn "auto-refresh 30s-5 phút".
+// Chỉnh số này nếu muốn refresh nhanh/chậm hơn.
 export const revalidate = 60;
 
 export async function GET() {
@@ -11,10 +12,11 @@ export async function GET() {
 
   const pageIds = await getAllowedPageIds(ctx);
 
-  const [customer, revenue] = await Promise.all([
+  const [customer, revenue, conversion] = await Promise.all([
     getCustomerKpis(pageIds),
     getRevenueKpis(pageIds),
+    getConversionRate(pageIds),
   ]);
 
-  return NextResponse.json({ customer, revenue });
+  return NextResponse.json({ customer, revenue, conversion });
 }

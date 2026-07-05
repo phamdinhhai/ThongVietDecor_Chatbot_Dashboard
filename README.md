@@ -13,6 +13,19 @@ Dashboard đa khách hàng cho dữ liệu chatbot trên Supabase. Mỗi đơn v
 - Next.js App Router, deploy Vercel. Server dùng `service_role_key`, không bao giờ lộ ra browser.
 - Auto-refresh 60s ở client (`DashboardClient.tsx`) + cache ISR 60s ở server. Đổi `REFRESH_MS`
   trong `src/app/dashboard/DashboardClient.tsx` nếu muốn nhanh/chậm hơn (bạn chọn khoảng 30s-5p).
+- **KPI tính bằng Postgres RPC function, không kéo hết bảng về Node.js rồi group bằng JS.**
+  `src/lib/queries.ts` chỉ gọi `supabase.rpc(...)`; toàn bộ `GROUP BY`/`COUNT(DISTINCT ...)` chạy
+  trong Postgres (`supabase/migrations/002_kpi_rpc_functions.sql`). Đã test bằng Postgres local với
+  dữ liệu mẫu mô phỏng đúng ca thật (đơn nhiều sản phẩm + dòng `ID Lọc` NULL) — kết quả khớp tay.
+  Lý do đổi: cách cũ (fetch toàn bộ `order_list`/`fb_chats` mỗi 60s rồi tính trong JS) sẽ chậm dần
+  và tốn băng thông khi 2 bảng này lớn lên; đẩy xuống DB thì mỗi lần refresh chỉ trả về vài con số.
+- **3 tab trên dashboard** (`DashboardTabs.tsx`): Tổng quan (KPI, như trên) | Khách hàng | Đơn hàng.
+  2 tab sau là bảng dữ liệu thô có tìm kiếm (debounce 300ms) + phân trang 25 dòng/trang, gọi
+  `/api/table/customers` và `/api/table/orders` (lọc theo `page_id` giống hệt logic KPI).
+  Cột hiển thị đã lược bớt các cột nội bộ không cần cho người dùng cuối (id, `Customer id`,
+  `event_mark`, `spam_check`, `spam_mark_root`, `thread_id`, `n_spam_time` bên `customer_data`;
+  `id` nội bộ bên `order_list`). Cột `Page` chỉ hiện với `super_admin`. Muốn đổi cột hiển thị, sửa
+  `CUSTOMER_BASE_COLUMNS`/`ORDER_BASE_COLUMNS` trong `DashboardTabs.tsx`.
 
 ## Setup
 
@@ -21,9 +34,11 @@ npm install
 cp .env.example .env.local   # điền URL + key thật từ Supabase
 ```
 
-Chạy migration control-plane trong Supabase SQL Editor:
+Chạy migration control-plane trong Supabase SQL Editor (theo đúng thứ tự):
 ```
 supabase/migrations/001_dashboard_control_plane.sql
+supabase/migrations/002_kpi_rpc_functions.sql
+supabase/migrations/003_fix_cumulative_and_duplicate_orders.sql
 ```
 
 Tạo tenant + gán page_id (ví dụ, chạy trong SQL Editor hoặc Table Editor):
@@ -52,58 +67,50 @@ npm run dev
 2. Import vào Vercel, thêm 4 biến môi trường trong `.env.example` vào Vercel Project Settings > Environment Variables.
 3. Deploy — Next.js App Router chạy trực tiếp trên Vercel không cần cấu hình thêm.
 
-## Cơ sở của các rule chuẩn hóa (đối chiếu với dữ liệu mẫu thật bạn cung cấp)
+## ✅ Đã xác nhận từ dữ liệu thật
 
-Đã kiểm chứng trên `customer_data_rows.csv` (412 dòng), `order_list_rows.csv` (22 dòng),
-`page_tokens_rows.csv` (2 dòng):
+1. **Format `billing`** — có 2 dạng lẫn nhau (`"1.407.000đ"` và `"589000"`). Logic tách số (giờ
+   nằm trong SQL function, `regexp_replace(billing, '[^0-9]', '', 'g')`) xử lý đúng cả hai.
+2. **`order_list.conversation_id`** đúng format `{end_user_id}_{page_id}`, khớp `fb_chats.session_id`.
+   Tách `page_id` theo dấu `_` cuối trong migration là đúng.
+3. **Đếm đơn hàng** — `order_list` mỗi DÒNG là 1 sản phẩm, không phải 1 đơn. `get_revenue_kpis()`
+   gộp nhóm theo `(conversation_id, "ID Lọc")` để ra đúng số đơn thật.
+4. **Đơn bị cộng dồn khi khách thêm món (migration 003)** — phát hiện từ dữ liệu thật: khách chốt
+   1 món, sau đó thêm món thứ 2, hệ thống ghi dòng MỚI liệt kê lại toàn bộ (`"ID Lọc"` khác dòng cũ)
+   thay vì update dòng cũ → trước đây bị đếm thành 2 đơn, cộng cả 2 khoản tiền. Giờ: nếu cùng
+   `conversation_id`, và mã sản phẩm (tách từ cột `"order"`) của nhóm sau **chứa toàn bộ** mã của
+   nhóm trước (+ nhiều hơn, + id lớn hơn) → nhóm trước bị coi là bản cũ, chỉ tính nhóm sau. Số nhóm
+   bị gộp kiểu này hiện ở KPI card "Tổng đơn hàng" ("N đã gộp do sửa đơn").
+5. **Dòng trùng y hệt trong cùng 1 đơn (migration 003)** — cùng `conversation_id` + `"ID Lọc"` +
+   `"order"` + `billing` (nghi webhook n8n gửi lại) → chỉ tính 1 lần, không cộng trùng doanh thu.
+   Số dòng bị loại hiện ở KPI card ("N dòng trùng đã loại").
+6. **Đã test bằng Postgres local** với dữ liệu mô phỏng đúng các case trên (đơn nhiều sản phẩm,
+   đơn cộng dồn, dòng trùng y hệt, đơn không liên quan) — kết quả khớp tay chính xác từng trường hợp.
 
-- **`order_list` và `customer_data` đã có sẵn cột `page_id`/`"Page id"` thật** — không cần tách
-  từ chuỗi. Migration chỉ tạo index, không tạo generated column cho 2 bảng này.
-- **`billing`** có 2 format lẫn nhau trong cùng bảng: `"1.407.000đ"` và `"589000"`. Hàm
-  `normalizeBilling()` (bỏ mọi ký tự không phải số) xử lý đúng cả hai.
-- **`customer_data` bị trùng lặp thật**: nhóm theo `("Customer id", "Page id")` cho ra
-  100/412 dòng trùng lặp HOÀN TOÀN (giống hệt nhau trừ `id`) — 47 nhóm, phần lớn do n8n
-  webhook ghi lại nhiều lần. `getCustomerKpis()` đã dùng dedup này để tính "khách hàng thật"
-  thay vì đếm dòng thô.
-- **`spam_mark` là một con số đếm (quan sát: 1-27), không phải cờ boolean** — gần như mọi
-  khách hàng đều có giá trị này, nên "coi có giá trị = spam" (cách làm ban đầu) sẽ cho ra
-  tỷ lệ ~98%, sai và gây hiểu lầm. Dashboard hiện chỉ hiển thị giá trị trung bình, KHÔNG suy
-  ra tỷ lệ spam. `Notice`, `event_mark`, `spam_mark_root`, `facebook_label` hiện 100% NULL
-  trong dữ liệu mẫu — không dùng trong KPI vì chưa có dữ liệu.
-- **`order_list`**: nhóm theo `(conversation_id, "ID Lọc")` cho 22 dòng thật ra đúng 20 đơn
-  (1 đơn có 3 dòng sản phẩm của Phạm Hải, 3 dòng thiếu `"ID Lọc"` được tính riêng + đánh dấu
-  cần xác minh) — khớp với logic trong `getRevenueKpis()`.
-- **`phone`**: 21/22 dòng đúng định dạng `0` + 9 số, 1 dòng lỗi (`"0947.553.005"` có dấu chấm).
-  `normalizePhone()`/`isPhoneValid()` xử lý và phát hiện các trường hợp này.
-- **`page_tokens` chứa access token Facebook THẬT** — `getPageDirectory()` chỉ select
-  `page_id, platform, name`, không bao giờ select `token`. Tuyệt đối không thêm `token` vào
-  bất kỳ query/API/export nào của dashboard.
+## ⚠️ Cần bạn xác nhận trước khi lên production
 
-## Trang "Chất lượng dữ liệu" (mới)
-
-`/api/data-quality` + phần "Chất lượng dữ liệu" trên dashboard hiển thị: số nhóm khách hàng
-trùng lặp, số dòng đơn hàng thiếu `"ID Lọc"`, số dòng phone/billing sai định dạng. Đây là
-điểm khởi đầu — có thể mở rộng thêm hành động "gộp trùng lặp" (ghi vào DB) ở phase sau.
-
-## ⚠️ Còn lại cần bạn xác nhận / quyết định
-
-1. **Ngưỡng phân loại "spam"** — nếu có quy tắc nghiệp vụ (vd `spam_mark >= 5` là spam),
-   cung cấp để bổ sung tỷ lệ spam chính xác vào `getCustomerKpis()`.
-2. **Có nên tự động xóa/gộp 100 dòng `customer_data` trùng lặp trong DB thật không?**
-   Hiện dashboard chỉ tính toán loại trừ khi hiển thị KPI, CHƯA đụng vào dữ liệu gốc — an toàn
-   nhưng dữ liệu gốc vẫn còn trùng. Cần bạn quyết định có chạy dedup thật (DELETE) hay không.
-3. **`fb_chats`, `workflow_query`, `image_store`** hiện KHÔNG nằm trong dashboard (theo phạm vi
-   bạn xác nhận là "chủ yếu xoay quanh customer_data/order_list/page_tokens"). Phần SQL tách
-   `page_id` cho các bảng này được để dạng comment trong migration, dùng khi cần mở rộng.
-4. **Middleware dùng Edge Runtime** — build có cảnh báo `@supabase/supabase-js` dùng API
-   Node.js không được hỗ trợ đầy đủ trên Edge Runtime. Build vẫn thành công, nhưng nên test kỹ
-   luồng đăng nhập/redirect sau khi deploy lên Vercel; nếu gặp lỗi runtime, có thể chuyển
-   middleware sang kiểm tra cookie tồn tại thay vì gọi `supabase.auth.getUser()` trực tiếp.
+1. **Dòng có `"ID Lọc"` = NULL** — không gộp an toàn được vào nhóm đơn, mỗi dòng NULL hiện được
+   tính là 1 "đơn cần xác minh" riêng. Cần bạn xác nhận: có nên gộp các dòng NULL cùng
+   `conversation_id` thành 1 đơn hay giữ tách riêng như hiện tại?
+2. **Logic "đơn cộng dồn" ở mục 4 trên** dựa trên bằng chứng quan sát được (1 case thật trong dữ
+   liệu bạn gửi) — chưa chạy qua toàn bộ lịch sử `order_list` để đếm xem case này xảy ra bao nhiêu
+   lần và có case ngoại lệ nào không (vd 2 đơn thật trùng ngẫu nhiên 1 vài mã sản phẩm). Nên chạy
+   thử trên Supabase thật rồi đối chiếu số "đã gộp do sửa đơn" với thực tế trước khi tin tưởng
+   hoàn toàn con số doanh thu.
+3. **Bảng dữ liệu thô (tab Khách hàng/Đơn hàng, `/api/table/*`) dùng filter/search qua PostgREST
+   trên cột `"Page id"` (có khoảng trắng) — phần này CHƯA test được trên Supabase thật** (sandbox
+   không có mạng tới supabase.co để dựng PostgREST thật, chỉ test được các SQL function ở trên qua
+   Postgres thuần). Cú pháp dùng đúng theo tài liệu PostgREST, nhưng bạn nên bấm thử tab "Khách
+   hàng" sau khi deploy — nếu lỗi 500, gửi tôi nội dung lỗi (thấy trong Network tab của trình duyệt
+   hoặc Vercel Function Logs), tôi sửa ngay.
 
 ## Việc chưa làm (phase 2, cố tình chưa làm ở v1)
 
 - Bộ lọc theo khoảng ngày (hiện tại KPI tính trên toàn bộ lịch sử).
 - Trang admin để tự khai báo tenant/page_id qua UI (hiện làm bằng SQL trực tiếp).
-- Xuất PDF, chỉ mới có xuất CSV.
-- Hành động "gộp/xóa trùng lặp" thật trong DB (hiện chỉ tính toán loại trừ khi hiển thị).
-- Dashboard cho `fb_chats`/`workflow_query`/`image_store` — ngoài phạm vi ưu tiên hiện tại.
+- Xuất PDF, chỉ mới có xuất CSV (cho `order_list`, xuất nguyên bảng chưa gộp đơn — dùng để đối
+  chiếu/audit, không dùng số dòng CSV làm số đơn).
+- Dashboard riêng cho `image_store`/`images` (visual search) — chưa nằm trong nhóm ưu tiên
+  khách hàng/kinh doanh/doanh thu.
+- Sắp xếp cột / lọc nâng cao trong bảng Khách hàng, Đơn hàng — hiện chỉ có tìm kiếm text +
+  phân trang, sắp theo id giảm dần (mới nhất trước).

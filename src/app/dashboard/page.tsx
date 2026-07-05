@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { getUserContext, getAllowedPageIds } from '@/lib/tenant';
-import { getCustomerKpis, getRevenueKpis } from '@/lib/queries';
-import { DashboardClient } from './DashboardClient';
+import { getCustomerKpis, getRevenueKpis, getConversionRate } from '@/lib/queries';
+import { DashboardTabs } from './DashboardTabs';
 
 export const revalidate = 60;
 
@@ -11,9 +11,10 @@ export default async function DashboardPage() {
 
   const pageIds = await getAllowedPageIds(ctx);
 
-  const [customer, revenue] = await Promise.all([
+  const [customer, revenue, conversion] = await Promise.all([
     getCustomerKpis(pageIds),
     getRevenueKpis(pageIds),
+    getConversionRate(pageIds),
   ]);
 
   return (
@@ -25,7 +26,10 @@ export default async function DashboardPage() {
         </span>
       </header>
 
-      <DashboardClient initialData={{ customer, revenue }} />
+      <DashboardTabs
+        initialData={{ customer, revenue, conversion }}
+        showPageColumn={ctx.role === 'super_admin'}
+      />
     </main>
   );
 }
