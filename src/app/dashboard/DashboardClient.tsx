@@ -21,23 +21,36 @@ export type Kpis = {
 
 const REFRESH_MS = 60_000;
 
+const ICON_PATHS = {
+  users: 'M15 19.128a9.38 9.38 0 0 0 2.625.372 9.337 9.337 0 0 0 4.121-.952 4.125 4.125 0 0 0-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 0 1 8.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0 1 11.964-3.07M12 7.5a3.375 3.375 0 1 1-6.75 0 3.375 3.375 0 0 1 6.75 0Zm8.25 2.25a2.625 2.625 0 1 1-5.25 0 2.625 2.625 0 0 1 5.25 0Z',
+  orders: 'M8.25 6.75h12M8.25 12h12m-12 5.25h12M3.75 6.75h.008v.008H3.75V6.75Zm0 5.25h.008v.008H3.75V12Zm0 5.25h.008v.008H3.75v-.008Z',
+  revenue: 'M2.25 18.75a60.07 60.07 0 0 1 15.797 2.101c.727.198 1.453-.342 1.453-1.096V18.75M3.75 4.5v.75A.75.75 0 0 1 3 6h-.75m0 0v-.375c0-.621.504-1.125 1.125-1.125H20.25M2.25 6v9m18-10.5v.75c0 .414.336.75.75.75h.75m-1.5-1.5h.375c.621 0 1.125.504 1.125 1.125v9.75c0 .621-.504 1.125-1.125 1.125h-.375m1.5-1.5H21a.75.75 0 0 0-.75.75v.75m-18-1.5h.75a.75.75 0 0 1 .75.75v.75m0-10.5h16.5m-16.5 0H3a.75.75 0 0 0-.75.75v.75m0 0h.75a.75.75 0 0 1 .75.75m13.5 0a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z',
+  conversion: 'M3 4.5h18M6.75 9h10.5M10.5 13.5h3M12 18v-4.5m0 0L9.75 15.75M12 13.5l2.25 2.25',
+  product: 'm21 7.5-9-5.25L3 7.5m18 0-9 5.25m9-5.25v9l-9 5.25m0-9L3 7.5m9 5.25v9M3 7.5v9l9 5.25',
+  duplicate: 'M16.5 8.25V6A2.25 2.25 0 0 0 14.25 3.75h-8A2.25 2.25 0 0 0 4 6v8a2.25 2.25 0 0 0 2.25 2.25H8.5m3-8h6.25A2.25 2.25 0 0 1 20 10.5v6.25A2.25 2.25 0 0 1 17.75 19h-6.25A2.25 2.25 0 0 1 9.25 16.75V10.5A2.25 2.25 0 0 1 11.5 8.25Z',
+} as const;
+
 function formatVnd(value: number): string {
   return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(value);
 }
 
-function orderHint(revenue: Kpis['revenue']): string | undefined {
-  const parts: string[] = [];
-  if (revenue.ordersNeedingVerification > 0) parts.push(`${revenue.ordersNeedingVerification.toLocaleString('vi-VN')} cần xác minh`);
-  if (revenue.ordersCollapsedAsRevision > 0) parts.push(`${revenue.ordersCollapsedAsRevision.toLocaleString('vi-VN')} gộp sửa đơn`);
-  if (revenue.duplicateRowsRemoved > 0) parts.push(`${revenue.duplicateRowsRemoved.toLocaleString('vi-VN')} dòng trùng loại`);
-  return parts.length ? parts.join(' · ') : undefined;
-}
-
 function Icon({ path }: { path: string }) {
   return (
-    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.7} stroke="currentColor">
+    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.75} stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" d={path} />
     </svg>
+  );
+}
+
+function ChartCard({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
+  return (
+    <section className="card p-5">
+      <div className="mb-4">
+        <h3 className="text-base font-semibold text-surface-950">{title}</h3>
+        {subtitle && <p className="mt-1 text-sm text-surface-500">{subtitle}</p>}
+      </div>
+      {children}
+    </section>
   );
 }
 
@@ -65,15 +78,12 @@ export function DashboardClient({ initialData }: { initialData: Kpis }) {
 
   return (
     <div className="space-y-6">
-      {/* Hero */}
-      <section className="overflow-hidden rounded-3xl bg-gradient-to-br from-surface-950 via-brand-950 to-surface-900 p-6 text-white shadow-glow animate-slide-up">
+      <section className="rounded-3xl border border-surface-800 bg-surface-950 p-6 text-white shadow-card animate-slide-up">
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
-            <p className="mb-2 inline-flex rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-brand-100 ring-1 ring-white/15">
-              Live analytics • tự động cập nhật mỗi {REFRESH_MS / 1000}s
-            </p>
+            <p className="mb-2 text-sm font-medium text-brand-200">Live analytics · cập nhật mỗi {REFRESH_MS / 1000}s</p>
             <h2 className="text-2xl font-bold tracking-tight sm:text-3xl">Hiệu suất chatbot bán hàng</h2>
-            <p className="mt-2 max-w-2xl text-sm text-surface-300">
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-surface-300">
               Tổng hợp khách nhắn tin, đơn hàng, doanh thu và phân bổ thời gian tương tác từ dữ liệu Supabase.
             </p>
           </div>
@@ -83,84 +93,72 @@ export function DashboardClient({ initialData }: { initialData: Kpis }) {
         </div>
       </section>
 
-      {/* KPI Cards */}
-      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-6">
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
         <KpiCard
           label="Tổng khách hàng"
           value={data.customer.total.toLocaleString('vi-VN')}
           hint={`${data.conversion.sessionCount.toLocaleString('vi-VN')} hội thoại có tin nhắn`}
-          gradient="linear-gradient(135deg, #6366f1, #0ea5e9)"
-          icon={<Icon path="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m-7.5-2.962a3.75 3.75 0 1 0-7.5 0 3.75 3.75 0 0 0 7.5 0Zm9-2.25a2.25 2.25 0 1 0-4.5 0 2.25 2.25 0 0 0 4.5 0ZM9 13.5a6 6 0 0 0-6 6v.75h12v-.75a6 6 0 0 0-6-6Z" />}
+          tone="brand"
+          icon={<Icon path={ICON_PATHS.users} />}
         />
         <KpiCard
           label="Tổng đơn hàng"
           value={data.revenue.totalOrders.toLocaleString('vi-VN')}
-          hint={orderHint(data.revenue)}
-          gradient="linear-gradient(135deg, #10b981, #14b8a6)"
-          icon={<Icon path="M15.75 10.5V6a3.75 3.75 0 1 0-7.5 0v4.5m11.356-1.993 1.263 12c.07.665-.45 1.243-1.119 1.243H4.25a1.125 1.125 0 0 1-1.12-1.243l1.264-12A1.125 1.125 0 0 1 5.513 7.5h12.974c.576 0 1.059.435 1.119 1.007Z" />}
+          hint={`${data.revenue.ordersNeedingVerification.toLocaleString('vi-VN')} đơn cần xác minh · ${data.revenue.ordersCollapsedAsRevision.toLocaleString('vi-VN')} đơn sửa đã gộp`}
+          tone="emerald"
+          icon={<Icon path={ICON_PATHS.orders} />}
         />
         <KpiCard
           label="Doanh thu"
           value={formatVnd(data.revenue.totalRevenue)}
-          hint={`TB ${formatVnd(avgRevenue)} / đơn`}
-          gradient="linear-gradient(135deg, #f59e0b, #f97316)"
-          icon={<Icon path="M12 6v12m-3-9.818c.879-.517 1.877-.81 3-.81 1.123 0 2.121.293 3 .81M9 15.818c.879.517 1.877.81 3 .81 1.123 0 2.121-.293 3-.81M21 12a9 9 0 1 1-18 0 9 9 0 0 1 18 0Z" />}
+          hint={`Giá trị trung bình ${formatVnd(avgRevenue)} / đơn`}
+          tone="amber"
+          icon={<Icon path={ICON_PATHS.revenue} />}
         />
         <KpiCard
-          label="Chuyển đổi"
+          label="Tỷ lệ chuyển đổi"
           value={`${(data.conversion.rate * 100).toFixed(1)}%`}
           hint={`${data.conversion.orderCount.toLocaleString('vi-VN')} đơn / ${data.conversion.sessionCount.toLocaleString('vi-VN')} hội thoại`}
-          gradient="linear-gradient(135deg, #8b5cf6, #ec4899)"
-          icon={<Icon path="M2.25 18 9 11.25l4.306 4.306a11.95 11.95 0 0 1 5.814-5.518l2.63-1.238m-19.5 9.2 4.5-4.5m0 0 4.5 4.5m-4.5-4.5V3" />}
+          tone="violet"
+          icon={<Icon path={ICON_PATHS.conversion} />}
         />
         <KpiCard
           label="Sản phẩm hot"
           value={topProduct?.label ?? '—'}
-          hint={topProduct ? `${topProduct.value.toLocaleString('vi-VN')} lượt đặt` : 'Chưa có dữ liệu'}
-          valueClassName="line-clamp-2 text-base font-bold leading-snug"
-          gradient="linear-gradient(135deg, #06b6d4, #3b82f6)"
-          icon={<Icon path="M20.25 7.5 12 12.75 3.75 7.5M12 21V12.75m0 0L20.25 7.5M12 12.75 3.75 7.5m16.5 0L12 2.25 3.75 7.5m16.5 0v9.75L12 21m-8.25-13.5v9.75L12 21" />}
+          hint={topProduct ? `${topProduct.value.toLocaleString('vi-VN')} lượt đặt sau khi lọc trùng` : 'Chưa có dữ liệu'}
+          tone="sky"
+          icon={<Icon path={ICON_PATHS.product} />}
         />
         <KpiCard
-          label="Dữ liệu trùng"
+          label="Dữ liệu trùng đã loại"
           value={data.analytics.quality.duplicateOrderRowsRemoved.toLocaleString('vi-VN')}
-          hint={`${data.analytics.quality.duplicateChatRowsRemoved.toLocaleString('vi-VN')} tin nhắn trùng đã loại`}
-          gradient="linear-gradient(135deg, #f43f5e, #fb7185)"
-          icon={<Icon path="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />}
+          hint={`${data.analytics.quality.duplicateChatRowsRemoved.toLocaleString('vi-VN')} tin nhắn trùng · ${data.revenue.duplicateRowsRemoved.toLocaleString('vi-VN')} dòng order trùng KPI`}
+          tone="rose"
+          icon={<Icon path={ICON_PATHS.duplicate} />}
         />
       </section>
 
-      {/* Charts */}
       <section className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <div className="card p-5 xl:col-span-2">
-          <div className="mb-4 flex items-center justify-between">
-            <h3 className="font-semibold text-surface-900">Tin nhắn theo ngày</h3>
-            <span className="badge badge-brand">fb_chats</span>
-          </div>
-          <ChatByDayChart data={data.analytics.chatByDay} />
+        <div className="xl:col-span-2">
+          <ChartCard title="Tin nhắn theo ngày" subtitle="Số tin nhắn đã lọc trùng theo từng ngày">
+            <ChatByDayChart data={data.analytics.chatByDay} />
+          </ChartCard>
         </div>
-        <div className="card p-5">
-          <div className="mb-4 flex items-center justify-between">
-            <h3 className="font-semibold text-surface-900">Sản phẩm đặt nhiều</h3>
-            <span className="badge badge-success">Top 8</span>
-          </div>
+        <ChartCard title="Sản phẩm đặt nhiều" subtitle="Top sản phẩm sau khi lọc đơn trùng">
           <TopProductsChart data={data.analytics.topProducts} />
-        </div>
+        </ChartCard>
       </section>
 
       <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <div className="card p-5">
-          <h3 className="mb-4 font-semibold text-surface-900">Theo giờ trong ngày</h3>
+        <ChartCard title="Tin nhắn theo giờ" subtitle="Phân bổ trong ngày">
           <ChatByHourChart data={data.analytics.chatByHour} />
-        </div>
-        <div className="card p-5">
-          <h3 className="mb-4 font-semibold text-surface-900">Theo ngày trong tuần</h3>
+        </ChartCard>
+        <ChartCard title="Tin nhắn theo thứ" subtitle="Phân bổ trong tuần">
           <ChatByWeekdayChart data={data.analytics.chatByWeekday} />
-        </div>
-        <div className="card p-5">
-          <h3 className="mb-4 font-semibold text-surface-900">Trạng thái khách hàng</h3>
+        </ChartCard>
+        <ChartCard title="Trạng thái khách hàng" subtitle="Mua hàng so với chưa mua">
           <StateBreakdownChart data={data.customer.stateBreakdown} />
-        </div>
+        </ChartCard>
       </section>
     </div>
   );

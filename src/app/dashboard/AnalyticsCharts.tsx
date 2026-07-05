@@ -1,8 +1,6 @@
 'use client';
 
 import {
-  Area,
-  AreaChart,
   Bar,
   BarChart,
   CartesianGrid,
@@ -14,110 +12,94 @@ import {
 
 type ChartPoint = { label: string; value: number };
 
+const CHART_HEIGHT = 260;
+const GRID_COLOR = '#e2e8f0';
+const AXIS_COLOR = '#64748b';
+const BAR_COLOR = '#4f46e5';
+const BAR_COLOR_MUTED = '#0f766e';
+const BAR_RADIUS: [number, number, number, number] = [3, 3, 0, 0];
+const HORIZONTAL_BAR_RADIUS: [number, number, number, number] = [0, 3, 3, 0];
+
 const TOOLTIP_STYLE = {
-  borderRadius: 12,
+  borderRadius: 10,
   border: '1px solid #e2e8f0',
   boxShadow: '0 8px 24px rgb(15 23 42 / 0.08)',
   fontSize: 12,
 };
 
 function EmptyState() {
-  return <p className="flex h-[200px] items-center justify-center text-sm text-surface-400">Chưa có dữ liệu</p>;
+  return <p className="flex h-[220px] items-center justify-center text-sm text-surface-400">Chưa có dữ liệu</p>;
 }
 
-export function ChatByDayChart({ data }: { data: ChartPoint[] }) {
+function formatDayLabel(value: string): string {
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return value;
+  return `${d.getDate()}/${d.getMonth() + 1}`;
+}
+
+function StandardVerticalBarChart({
+  data,
+  tickFormatter,
+  barColor = BAR_COLOR,
+}: {
+  data: ChartPoint[];
+  tickFormatter?: (value: string) => string;
+  barColor?: string;
+}) {
   if (!data || data.length === 0) return <EmptyState />;
 
   return (
-    <ResponsiveContainer width="100%" height={260}>
-      <AreaChart data={data} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
-        <defs>
-          <linearGradient id="areaGradient" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#6366f1" stopOpacity={0.2} />
-            <stop offset="100%" stopColor="#6366f1" stopOpacity={0} />
-          </linearGradient>
-        </defs>
-        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+    <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
+      <BarChart data={data} margin={{ top: 8, right: 12, left: -12, bottom: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={GRID_COLOR} />
         <XAxis
           dataKey="label"
           fontSize={11}
-          stroke="#64748b"
+          stroke={AXIS_COLOR}
           tickLine={false}
           axisLine={false}
-          tickFormatter={(v: string) => {
-            const d = new Date(v);
-            return `${d.getDate()}/${d.getMonth() + 1}`;
-          }}
+          tickFormatter={tickFormatter}
         />
-        <YAxis fontSize={11} stroke="#64748b" tickLine={false} axisLine={false} allowDecimals={false} />
-        <Tooltip contentStyle={TOOLTIP_STYLE} cursor={{ stroke: '#c7d2fe' }} />
-        <Area
-          type="monotone"
-          dataKey="value"
-          stroke="#6366f1"
-          strokeWidth={2}
-          fill="url(#areaGradient)"
-          name="Tin nhắn"
-          dot={false}
-          activeDot={{ r: 4, fill: '#6366f1' }}
-        />
-      </AreaChart>
+        <YAxis fontSize={11} stroke={AXIS_COLOR} tickLine={false} axisLine={false} allowDecimals={false} />
+        <Tooltip contentStyle={TOOLTIP_STYLE} cursor={{ fill: '#f8fafc' }} />
+        <Bar dataKey="value" fill={barColor} radius={BAR_RADIUS} name="Số lượng" barSize={22} />
+      </BarChart>
     </ResponsiveContainer>
   );
+}
+
+export function ChatByDayChart({ data }: { data: ChartPoint[] }) {
+  return <StandardVerticalBarChart data={data} tickFormatter={formatDayLabel} />;
 }
 
 export function ChatByHourChart({ data }: { data: ChartPoint[] }) {
-  if (!data || data.length === 0) return <EmptyState />;
-
-  return (
-    <ResponsiveContainer width="100%" height={260}>
-      <BarChart data={data} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-        <XAxis dataKey="label" fontSize={10} stroke="#64748b" tickLine={false} axisLine={false} />
-        <YAxis fontSize={11} stroke="#64748b" tickLine={false} axisLine={false} allowDecimals={false} />
-        <Tooltip contentStyle={TOOLTIP_STYLE} cursor={{ fill: '#f8fafc' }} />
-        <Bar dataKey="value" fill="#0ea5e9" radius={[4, 4, 0, 0]} name="Tin nhắn" />
-      </BarChart>
-    </ResponsiveContainer>
-  );
+  return <StandardVerticalBarChart data={data} />;
 }
 
 export function ChatByWeekdayChart({ data }: { data: ChartPoint[] }) {
-  if (!data || data.length === 0) return <EmptyState />;
-
-  return (
-    <ResponsiveContainer width="100%" height={260}>
-      <BarChart data={data} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-        <XAxis dataKey="label" fontSize={12} stroke="#64748b" tickLine={false} axisLine={false} />
-        <YAxis fontSize={11} stroke="#64748b" tickLine={false} axisLine={false} allowDecimals={false} />
-        <Tooltip contentStyle={TOOLTIP_STYLE} cursor={{ fill: '#f8fafc' }} />
-        <Bar dataKey="value" fill="#8b5cf6" radius={[6, 6, 0, 0]} name="Tin nhắn" />
-      </BarChart>
-    </ResponsiveContainer>
-  );
+  return <StandardVerticalBarChart data={data} />;
 }
 
 export function TopProductsChart({ data }: { data: ChartPoint[] }) {
   if (!data || data.length === 0) return <EmptyState />;
 
   return (
-    <ResponsiveContainer width="100%" height={Math.max(200, data.length * 38)}>
-      <BarChart data={data} layout="vertical" margin={{ top: 0, right: 8, left: 0, bottom: 0 }}>
-        <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#e2e8f0" />
-        <XAxis type="number" fontSize={11} stroke="#64748b" tickLine={false} axisLine={false} allowDecimals={false} />
+    <ResponsiveContainer width="100%" height={Math.max(220, data.length * 38)}>
+      <BarChart data={data} layout="vertical" margin={{ top: 0, right: 12, left: 0, bottom: 0 }}>
+        <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke={GRID_COLOR} />
+        <XAxis type="number" fontSize={11} stroke={AXIS_COLOR} tickLine={false} axisLine={false} allowDecimals={false} />
         <YAxis
           type="category"
           dataKey="label"
           fontSize={10}
-          stroke="#64748b"
+          stroke={AXIS_COLOR}
           tickLine={false}
           axisLine={false}
-          width={140}
+          width={150}
           tick={{ textAnchor: 'end' }}
         />
         <Tooltip contentStyle={TOOLTIP_STYLE} cursor={{ fill: '#f8fafc' }} />
-        <Bar dataKey="value" fill="#10b981" radius={[0, 6, 6, 0]} name="Đơn đặt" barSize={20} />
+        <Bar dataKey="value" fill={BAR_COLOR_MUTED} radius={HORIZONTAL_BAR_RADIUS} name="Số lượng" barSize={20} />
       </BarChart>
     </ResponsiveContainer>
   );

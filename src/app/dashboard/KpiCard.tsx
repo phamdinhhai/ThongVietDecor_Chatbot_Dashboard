@@ -4,46 +4,41 @@ type KpiCardProps = {
   label: string;
   value: string;
   hint?: string;
-  icon?: ReactNode;
-  gradient?: string;
-  trend?: { value: string; positive: boolean };
-  valueClassName?: string;
+  icon: ReactNode;
+  tone?: 'brand' | 'emerald' | 'amber' | 'violet' | 'sky' | 'rose';
 };
 
-export function KpiCard({ label, value, hint, icon, gradient, trend, valueClassName }: KpiCardProps) {
-  return (
-    <div className="kpi-card card-hover animate-fade-in min-h-[132px]">
-      {gradient && (
-        <div
-          className="kpi-card-gradient rounded-2xl"
-          style={{ background: gradient }}
-        />
-      )}
+const toneClasses = {
+  brand: 'bg-brand-50 text-brand-700 ring-brand-100',
+  emerald: 'bg-emerald-50 text-emerald-700 ring-emerald-100',
+  amber: 'bg-amber-50 text-amber-700 ring-amber-100',
+  violet: 'bg-violet-50 text-violet-700 ring-violet-100',
+  sky: 'bg-sky-50 text-sky-700 ring-sky-100',
+  rose: 'bg-rose-50 text-rose-700 ring-rose-100',
+};
 
-      <div className="relative flex h-full items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-surface-500">{label}</p>
-          <p
-            className={`animate-count-up leading-tight text-surface-900 ${
-              valueClassName ?? 'truncate text-2xl font-bold'
-            }`}
-            title={value}
-          >
-            {value}
-          </p>
-          {hint && <p className="mt-1.5 line-clamp-2 text-xs leading-snug text-surface-400">{hint}</p>}
-          {trend && (
-            <p className={`mt-1.5 text-xs font-medium ${trend.positive ? 'text-emerald-600' : 'text-rose-500'}`}>
-              {trend.positive ? '▲' : '▼'} {trend.value}
+export function KpiCard({ label, value, hint, icon, tone = 'brand' }: KpiCardProps) {
+  return (
+    <article className="card card-hover min-h-[148px] p-5 animate-fade-in">
+      <div className="flex h-full flex-col justify-between gap-4">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0 flex-1">
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-surface-500">{label}</p>
+            <p className="mt-2 break-words text-[clamp(1.35rem,2vw,1.875rem)] font-bold leading-tight text-surface-950" title={value}>
+              {value}
             </p>
-          )}
-        </div>
-        {icon && (
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-surface-50 text-surface-500 ring-1 ring-surface-100">
+          </div>
+          <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ring-1 ${toneClasses[tone]}`}>
             {icon}
           </div>
+        </div>
+
+        {hint && (
+          <p className="text-sm leading-relaxed text-surface-500">
+            {hint}
+          </p>
         )}
       </div>
-    </div>
+    </article>
   );
 }
