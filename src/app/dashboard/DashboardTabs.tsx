@@ -5,7 +5,8 @@ import { DashboardClient, type Kpis } from './DashboardClient';
 import { DataTable, type ColumnDef } from './DataTable';
 
 type CustomerRow = {
-  id: number;
+  display_id: number;
+  source_id: number;
   session_id: string;
   name: string | null;
   phone: string | null;
@@ -16,6 +17,8 @@ type CustomerRow = {
 };
 
 type OrderRow = {
+  display_id: number;
+  source_id: number;
   order_key: string;
   name: string | null;
   phone: string | null;
@@ -55,7 +58,7 @@ function withPageColumn<T extends { page: string | null }>(columns: ColumnDef<T>
 }
 
 const CUSTOMER_BASE_COLUMNS: ColumnDef<CustomerRow>[] = [
-  { key: 'id', label: 'ID' },
+  { key: 'display_id', label: 'ID' },
   { key: 'session_id', label: 'Session ID' },
   { key: 'name', label: 'Tên' },
   { key: 'phone', label: 'SĐT', render: (row) => row.phone ?? <span className="text-surface-300">null</span> },
@@ -65,6 +68,7 @@ const CUSTOMER_BASE_COLUMNS: ColumnDef<CustomerRow>[] = [
 ];
 
 const ORDER_BASE_COLUMNS: ColumnDef<OrderRow>[] = [
+  { key: 'display_id', label: 'ID' },
   { key: 'name', label: 'Tên khách' },
   { key: 'phone', label: 'SĐT' },
   { key: 'address', label: 'Địa chỉ' },
@@ -79,8 +83,8 @@ const ORDER_BASE_COLUMNS: ColumnDef<OrderRow>[] = [
   { key: 'notice', label: 'Ghi chú' },
   {
     key: 'merged_rows',
-    label: 'Gộp',
-    render: (row) => row.merged_rows > 1 ? <span className="badge badge-warning">{row.merged_rows} dòng</span> : '—',
+    label: 'Dòng trùng',
+    render: (row) => row.merged_rows > 1 ? <span className="badge badge-warning">Đã gộp {row.merged_rows}</span> : '—',
   },
   { key: 'conversation_id', label: 'Hội thoại' },
 ];
@@ -142,7 +146,8 @@ export function DashboardTabs({
           <div>
             <h2 className="text-lg font-semibold text-surface-900">Danh sách đơn hàng</h2>
             <p className="mt-1 text-sm text-surface-500">
-              Gộp đơn theo conversation + ID Lọc, chuẩn hoá số điện thoại và giá trị đơn.
+              Gộp duplicate theo conversation + số điện thoại + sản phẩm chuẩn hoá + giá trị đơn.
+              ID hiển thị là số thứ tự liên tục, không dùng id gốc bị nhảy cóc.
             </p>
           </div>
           <DataTable<OrderRow>

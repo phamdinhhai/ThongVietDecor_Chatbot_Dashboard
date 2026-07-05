@@ -71,7 +71,8 @@ export type AnalyticsData = {
   quality: {
     zeroBillingCount: number;
     missingIdLocCount: number;
-    missingPhoneCount: number;
+    duplicateOrderRowsRemoved: number;
+    duplicateChatRowsRemoved: number;
   };
 };
 
@@ -95,7 +96,8 @@ export async function getDashboardAnalytics(pageIds: PageScope): Promise<Analyti
     quality: {
       zeroBillingCount: Number(q.zero_billing_count ?? 0),
       missingIdLocCount: Number(q.missing_id_loc_count ?? 0),
-      missingPhoneCount: Number(q.missing_phone_count ?? 0),
+      duplicateOrderRowsRemoved: Number(q.duplicate_order_rows_removed ?? 0),
+      duplicateChatRowsRemoved: Number(q.duplicate_chat_rows_removed ?? 0),
     },
   };
 }

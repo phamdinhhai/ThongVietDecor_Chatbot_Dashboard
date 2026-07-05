@@ -7,12 +7,12 @@ type KpiCardProps = {
   icon?: ReactNode;
   gradient?: string;
   trend?: { value: string; positive: boolean };
+  valueClassName?: string;
 };
 
-export function KpiCard({ label, value, hint, icon, gradient, trend }: KpiCardProps) {
+export function KpiCard({ label, value, hint, icon, gradient, trend, valueClassName }: KpiCardProps) {
   return (
-    <div className="kpi-card card-hover animate-fade-in">
-      {/* Background gradient */}
+    <div className="kpi-card card-hover animate-fade-in min-h-[132px]">
       {gradient && (
         <div
           className="kpi-card-gradient rounded-2xl"
@@ -20,11 +20,18 @@ export function KpiCard({ label, value, hint, icon, gradient, trend }: KpiCardPr
         />
       )}
 
-      <div className="relative flex items-start justify-between gap-3">
+      <div className="relative flex h-full items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <p className="mb-1 text-xs font-medium uppercase tracking-wide text-surface-500">{label}</p>
-          <p className="truncate text-2xl font-bold text-surface-900 animate-count-up">{value}</p>
-          {hint && <p className="mt-1 truncate text-xs text-surface-400">{hint}</p>}
+          <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-surface-500">{label}</p>
+          <p
+            className={`animate-count-up leading-tight text-surface-900 ${
+              valueClassName ?? 'truncate text-2xl font-bold'
+            }`}
+            title={value}
+          >
+            {value}
+          </p>
+          {hint && <p className="mt-1.5 line-clamp-2 text-xs leading-snug text-surface-400">{hint}</p>}
           {trend && (
             <p className={`mt-1.5 text-xs font-medium ${trend.positive ? 'text-emerald-600' : 'text-rose-500'}`}>
               {trend.positive ? '▲' : '▼'} {trend.value}
@@ -32,7 +39,7 @@ export function KpiCard({ label, value, hint, icon, gradient, trend }: KpiCardPr
           )}
         </div>
         {icon && (
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-surface-50 text-surface-400">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-surface-50 text-surface-500 ring-1 ring-surface-100">
             {icon}
           </div>
         )}

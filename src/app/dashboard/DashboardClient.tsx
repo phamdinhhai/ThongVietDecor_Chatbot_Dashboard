@@ -35,7 +35,7 @@ function orderHint(revenue: Kpis['revenue']): string | undefined {
 
 function Icon({ path }: { path: string }) {
   return (
-    <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" strokeWidth={1.7} stroke="currentColor">
+    <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" strokeWidth={1.7} stroke="currentColor">
       <path strokeLinecap="round" strokeLinejoin="round" d={path} />
     </svg>
   );
@@ -117,15 +117,16 @@ export function DashboardClient({ initialData }: { initialData: Kpis }) {
           label="Sản phẩm hot"
           value={topProduct?.label ?? '—'}
           hint={topProduct ? `${topProduct.value.toLocaleString('vi-VN')} lượt đặt` : 'Chưa có dữ liệu'}
+          valueClassName="line-clamp-2 text-base font-bold leading-snug"
           gradient="linear-gradient(135deg, #06b6d4, #3b82f6)"
-          icon={<Icon path="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z" />}
+          icon={<Icon path="M20.25 7.5 12 12.75 3.75 7.5M12 21V12.75m0 0L20.25 7.5M12 12.75 3.75 7.5m16.5 0L12 2.25 3.75 7.5m16.5 0v9.75L12 21m-8.25-13.5v9.75L12 21" />}
         />
         <KpiCard
-          label="Cần chuẩn hoá"
-          value={data.analytics.quality.zeroBillingCount.toLocaleString('vi-VN')}
-          hint="billing không có số / COD"
+          label="Dữ liệu trùng"
+          value={data.analytics.quality.duplicateOrderRowsRemoved.toLocaleString('vi-VN')}
+          hint={`${data.analytics.quality.duplicateChatRowsRemoved.toLocaleString('vi-VN')} tin nhắn trùng đã loại`}
           gradient="linear-gradient(135deg, #f43f5e, #fb7185)"
-          icon={<Icon path="M12 9v3.75m0 3.75h.008v.008H12v-.008Zm-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.948 3.378c-.866-1.5-3.03-1.5-3.896 0L2.697 16.126Z" />}
+          icon={<Icon path="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0 3.181 3.183a8.25 8.25 0 0 0 13.803-3.7M4.031 9.865a8.25 8.25 0 0 1 13.803-3.7l3.181 3.182m0-4.991v4.99" />}
         />
       </section>
 
