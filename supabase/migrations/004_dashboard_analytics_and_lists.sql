@@ -158,6 +158,77 @@ as $$
   );
 $$;
 
+-- Keep overview KPIs aligned with the order list RPC.
+-- PostgreSQL requires DROP before changing dependency/definition shape from older migrations.
+drop function if exists get_revenue_kpis(text[]) cascade;
+
+create function get_revenue_kpis(p_page_ids text[])
+returns table (
+  total_orders bigint,
+  total_revenue bigint,
+  orders_needing_verification bigint,
+  orders_collapsed_as_revision bigint,
+  duplicate_rows_removed bigint
+)
+language sql
+stable
+as $$
+  with filtered as (
+    select
+      o.*,
+      normalize_phone(o.phone) as normalized_phone,
+      normalize_order_text(o."order") as normalized_order,
+      normalize_vnd_amount(o.billing) as normalized_billing
+    from order_list o
+    where p_page_ids is null or o.page_id = any(p_page_ids)
+  ),
+  ranked as (
+    select
+      f.*,
+      row_number() over (
+        partition by conversation_id, normalized_phone, normalized_order, normalized_billing
+        order by case when "ID Lọc" is null or trim("ID Lọc") = '' then 1 else 0 end,
+                 length(coalesce(address, '')) desc,
+                 id desc
+      ) as dup_rank
+    from filtered f
+  ),
+  canonical_orders as (
+    select * from ranked where dup_rank = 1
+  )
+  select
+    (select count(*) from canonical_orders) as total_orders,
+    (select coalesce(sum(normalized_billing), 0) from canonical_orders) as total_revenue,
+    (select count(*) from canonical_orders where "ID Lọc" is null or trim("ID Lọc") = '') as orders_needing_verification,
+    0::bigint as orders_collapsed_as_revision,
+    ((select count(*) from filtered) - (select count(*) from canonical_orders)) as duplicate_rows_removed;
+$$;
+
+create or replace function get_conversion_rate(p_page_ids text[])
+returns table (
+  session_count bigint,
+  order_count bigint,
+  rate numeric
+)
+language sql
+stable
+as $$
+  select
+    s.session_count,
+    r.total_orders as order_count,
+    case when s.session_count > 0
+      then round(r.total_orders::numeric / s.session_count, 4)
+      else 0
+    end as rate
+  from
+    (
+      select count(distinct session_id) as session_count
+      from fb_chats
+      where p_page_ids is null or page_id = any(p_page_ids)
+    ) s,
+    (select total_orders from get_revenue_kpis(p_page_ids)) r;
+$$;
+
 drop function if exists get_customer_list_v2(text[], text, integer, integer);
 
 create or replace function get_customer_list_v2(
