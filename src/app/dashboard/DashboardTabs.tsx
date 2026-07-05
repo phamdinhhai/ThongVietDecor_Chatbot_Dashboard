@@ -89,10 +89,48 @@ const ORDER_BASE_COLUMNS: ColumnDef<OrderRow>[] = [
   { key: 'conversation_id', label: 'Hội thoại' },
 ];
 
+function TabIcon({ name }: { name: 'overview' | 'customers' | 'orders' }) {
+  const props = {
+    className: 'h-4 w-4',
+    viewBox: '0 0 24 24',
+    fill: 'none',
+    stroke: 'currentColor',
+    strokeWidth: 1.9,
+    strokeLinecap: 'round' as const,
+    strokeLinejoin: 'round' as const,
+  };
+
+  return (
+    <svg {...props} aria-hidden="true">
+      {name === 'overview' && (
+        <>
+          <rect x="4" y="11" width="3.5" height="7" rx="1" />
+          <rect x="10.25" y="6" width="3.5" height="12" rx="1" />
+          <rect x="16.5" y="9" width="3.5" height="9" rx="1" />
+        </>
+      )}
+      {name === 'customers' && (
+        <>
+          <circle cx="9" cy="8" r="3" />
+          <path d="M3.5 19c.8-3.4 2.8-5 5.5-5s4.7 1.6 5.5 5" />
+          <circle cx="17" cy="9" r="2.2" />
+          <path d="M15.5 14.5c2.3.2 3.8 1.7 4.4 4.5" />
+        </>
+      )}
+      {name === 'orders' && (
+        <>
+          <rect x="5" y="4" width="14" height="16" rx="2" />
+          <path d="M9 8h6M9 12h6M9 16h4" />
+        </>
+      )}
+    </svg>
+  );
+}
+
 const TABS = [
-  { key: 'overview', label: 'Tổng quan', icon: '📊' },
-  { key: 'customers', label: 'Khách hàng', icon: '👥' },
-  { key: 'orders', label: 'Đơn hàng', icon: '🛍️' },
+  { key: 'overview', label: 'Tổng quan', icon: 'overview' },
+  { key: 'customers', label: 'Khách hàng', icon: 'customers' },
+  { key: 'orders', label: 'Đơn hàng', icon: 'orders' },
 ] as const;
 
 type TabKey = (typeof TABS)[number]['key'];
@@ -116,7 +154,7 @@ export function DashboardTabs({
             onClick={() => setTab(t.key)}
             className={`tab-btn ${tab === t.key ? 'tab-btn-active' : 'tab-btn-inactive'}`}
           >
-            <span className="mr-2">{t.icon}</span>
+            <span className="mr-2 inline-flex align-[-2px]"><TabIcon name={t.icon} /></span>
             {t.label}
           </button>
         ))}

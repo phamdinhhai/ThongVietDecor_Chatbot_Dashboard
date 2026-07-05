@@ -19,6 +19,7 @@ export type Kpis = {
   analytics: AnalyticsData;
 };
 
+type TabIconName = 'overview' | 'customers' | 'orders';
 type MetricIconName = 'customers' | 'orders' | 'revenue' | 'conversion' | 'product' | 'dedupe';
 
 const REFRESH_MS = 60_000;
@@ -75,9 +76,10 @@ function MetricIcon({ name }: { name: MetricIconName }) {
       )}
       {name === 'dedupe' && (
         <>
-          <rect x="4" y="4" width="9" height="9" rx="2" />
-          <rect x="11" y="11" width="9" height="9" rx="2" />
-          <path d="M8.5 8.5h6.8M15.3 8.5 13 6.2M15.3 8.5 13 10.8" />
+          <circle cx="8" cy="8" r="3" />
+          <circle cx="16" cy="16" r="3" />
+          <path d="M11.2 8h2.6A2.2 2.2 0 0 1 16 10.2V13" />
+          <path d="M12.8 16h-2.6A2.2 2.2 0 0 1 8 13.8V11" />
         </>
       )}
     </svg>
