@@ -89,7 +89,11 @@ as $$
   order_rows as (
     select *
     from order_list
-    where p_page_ids is null or page_id = any(p_page_ids)
+    where (p_page_ids is null or page_id = any(p_page_ids))
+      and nullif(trim(coalesce(phone, '')), '') is not null
+      and nullif(trim(coalesce(address, '')), '') is not null
+      and nullif(trim(coalesce("order", '')), '') is not null
+      and nullif(trim(coalesce(billing, '')), '') is not null
   ),
   order_dedup as (
     select distinct on (
@@ -128,17 +132,80 @@ as $$
     group by 1, 2
     order by 1
   ),
-  product_tokens as (
-    select nullif(trim(tok), '') as product
+  product_catalog(code, name) as (
+    values
+      ('TV-K004-VD', 'Kệ gỗ mini đa năng (bản vuông) - Gọn gàng góc nhỏ'),
+      ('TV-K006-VD', 'Kệ gỗ thông 5 tầng đa năng - Dòng vuông hiện đại'),
+      ('TV-K004-VT', 'Kệ treo quần áo (bản vuông) - Bản mộc cho phòng nhỏ'),
+      ('TV-K006-VT2', 'Kệ treo quần áo gỗ thông (2 tầng) - Bản vuông tối giản'),
+      ('TV-K006-VT3', 'Kệ treo quần áo gỗ thông (3 tầng) - Bản vuông tinh tế'),
+      ('TV-K004-VTD', 'Combo kệ treo & giá đồ đơn (bản vuông) - Tiết kiệm diện tích'),
+      ('TV-K006-VTD2', 'Kệ treo tích hợp giá đồ (2 tầng) - Bản vuông đa năng'),
+      ('TV-K006-VTD3', 'Kệ treo tích hợp giá đồ (3 tầng) - Bản vuông đa năng'),
+      ('TV-K004-VF', 'Hệ kệ 3 ngăn đa năng - Bản vuông vững chãi'),
+      ('TV-K006-VF2', 'Hệ kệ 3 ngăn đa năng - Bản vuông vững chãi'),
+      ('TV-K006-VF3', 'Hệ kệ 3 ngăn đa năng - Giải pháp không gian lớn'),
+      ('TV-K003-CD', 'Kệ gỗ mini đa năng (bản chéo) - Gọn gàng góc nhỏ'),
+      ('TV-K005-CD', 'Kệ gỗ thông 5 tầng - Bản chéo phong cách Scandinavian'),
+      ('TV-K003-CT', 'Kệ gỗ thông treo đơn - Bản Chéo Scandinavian'),
+      ('TV-K005-CT2', 'Kệ gỗ thông treo đơn (2 tầng) - Bản Chéo Scandinavian'),
+      ('TV-K005-CT3', 'Kệ gỗ thông treo đơn (3 tầng) - Bản Chéo Scandinavian'),
+      ('TV-K003-CTD', 'Combo kệ treo & giá đồ đơn (bản chéo) - Tiết kiệm diện tích'),
+      ('TV-K005-CTD2', 'Kệ treo tích hợp giá đồ (2 tầng) - Bản chéo đa năng'),
+      ('TV-K005-CTD3', 'Kệ treo tích hợp giá đồ (3 tầng) - Bản chéo đa năng'),
+      ('TV-K003-CF', 'Hệ kệ 3 ngăn đa năng - Scandinavian phóng khoáng'),
+      ('TV-K005-CF2', 'Hệ kệ 3 ngăn đa năng - Scandinavian phóng khoáng'),
+      ('TV-K005-CF3', 'Hệ kệ 3 ngăn đa năng - Scandinavian phóng khoáng'),
+      ('TV-K001', 'Kệ treo quần áo đa năng Model 01 - Gỗ thông mộc'),
+      ('TV-K002', 'Kệ treo quần áo đa năng Model 02 - Tiện ích tối đa'),
+      ('TV-K010', 'Kệ treo quần áo chữ A kinh điển - Gỗ thông nguyên bản'),
+      ('TV-K011', 'Cây treo đồ đứng Minimalist - Gỗ thông sấy'),
+      ('TV-K012-60', 'Kệ giày gỗ thông tự nhiên (Size 60cm)'),
+      ('TV-K012-80', 'Kệ giày gỗ thông tự nhiên (Size 80cm)'),
+      ('TV-K013', 'Táp đầu giường gỗ thông - Nhỏ xinh và ấm áp'),
+      ('TV-D002', 'Tủ Kệ Decor Đa Năng "Hòa Hợp" - Điểm Nhấn Bắc Âu Sang Trọng'),
+      ('TV-D003', 'Kệ decor "TĨNH" - Khoảng lặng cho không gian sống'),
+      ('TV-D005', 'Tủ kệ decor đa năng - Kết hợp ngăn kéo tiện dụng'),
+      ('TV-D017', 'Tủ kệ decor đa năng (5 ngăn)'),
+      ('TV-K007', 'Kệ gỗ trang trí hình thang 3 Tầng - Nét mộc cho không gian hiện đại'),
+      ('TV-D001-1', 'Kệ gỗ decor "Sánh Đôi" - Nhỏ xinh và tiện dụng'),
+      ('TV-D001-2', 'Kệ ngăn đa năng "Cân Bằng" - Nét mộc cho phòng khách'),
+      ('TV-D004', 'Kệ gỗ để bàn 4 ô đa năng - Thiết kế chữ S độc đáo'),
+      ('TV-D006', 'Kệ decor Xương Rồng (Bản nhỏ) - Điểm nhấn xanh cho ngôi nhà'),
+      ('TV-D007', 'Kệ decor Xương Rồng (Bản lớn) - Điểm nhấn xanh cho ngôi nhà'),
+      ('TV-D008', 'Bàn Console gỗ thông'),
+      ('TV-D009', 'Bàn Console gỗ thông (Bản basic / Chữ V tinh tế)'),
+      ('TV-D010', 'Bảng gỗ Pegboard treo tường - Sáng tạo không giới hạn'),
+      ('TV-D018', 'Giá sách Xương Cá - Nghệ thuật lưu trữ tri thức'),
+      ('TV-D013', 'Kệ mini để bàn (3 tầng) - Gọn gàng cảm hứng'),
+      ('TV-D014', 'Kệ mini để bàn (4 tầng) - Gọn gàng cảm hứng'),
+      ('TV-K008', 'Thang gỗ treo khăn decor (Bản chéo) - Nét mộc cho phòng tắm/ngủ'),
+      ('TV-K009', 'Thang gỗ treo khăn decor (Bản vuông) - Nét mộc cho phòng tắm/ngủ'),
+      ('TV-D011', 'Kệ gỗ mini để bàn - Trục tròn thanh thoát'),
+      ('TV-D012', 'Kệ bục tròn 3 tầng - Trưng bày decor xinh xắn'),
+      ('TV-D015', 'Kệ sách mini - Kệ để bàn gỗ thông nguyên bản'),
+      ('TV-D016', 'Kệ mini trưng bày đa năng - Nét mộc bàn làm việc'),
+      ('TV-D021', 'Kệ trang trí, decor đa năng')
+  ),
+  product_matches as (
+    select
+      upper(m[1]) as code,
+      coalesce(nullif(m[2], '')::int, 1) as quantity
     from order_dedup o
-    left join lateral unnest(string_to_array(coalesce(o."order", ''), ',')) tok on true
+    cross join lateral regexp_matches(
+      coalesce(o."order", ''),
+      '(TV-[A-Z0-9]+(?:-[A-Z0-9]+)*)(?:\s*[xX×]\s*([0-9]+))?',
+      'g'
+    ) as m
   ),
   top_products as (
-    select product as label, count(*) as value
-    from product_tokens
-    where product is not null
-    group by product
-    order by value desc, label asc
+    select
+      pc.code || ' · ' || pc.name as label,
+      sum(pm.quantity)::bigint as value
+    from product_matches pm
+    join product_catalog pc on pc.code = pm.code
+    group by pc.code, pc.name
+    order by value desc, pc.code asc
     limit 8
   ),
   quality as (
@@ -180,7 +247,11 @@ as $$
       normalize_order_text(o."order") as normalized_order,
       normalize_vnd_amount(o.billing) as normalized_billing
     from order_list o
-    where p_page_ids is null or o.page_id = any(p_page_ids)
+    where (p_page_ids is null or o.page_id = any(p_page_ids))
+      and nullif(trim(coalesce(o.phone, '')), '') is not null
+      and nullif(trim(coalesce(o.address, '')), '') is not null
+      and nullif(trim(coalesce(o."order", '')), '') is not null
+      and nullif(trim(coalesce(o.billing, '')), '') is not null
   ),
   ranked as (
     select
@@ -272,6 +343,10 @@ as $$
     select distinct on (conversation_id, normalize_phone(phone), normalize_order_text("order"), normalize_vnd_amount(billing))
       conversation_id, phone, id
     from order_list
+    where nullif(trim(coalesce(phone, '')), '') is not null
+      and nullif(trim(coalesce(address, '')), '') is not null
+      and nullif(trim(coalesce("order", '')), '') is not null
+      and nullif(trim(coalesce(billing, '')), '') is not null
     order by conversation_id, normalize_phone(phone), normalize_order_text("order"), normalize_vnd_amount(billing),
              case when "ID Lọc" is null or trim("ID Lọc") = '' then 1 else 0 end,
              id desc
@@ -346,7 +421,11 @@ as $$
       normalize_order_text(o."order") as normalized_order,
       normalize_vnd_amount(o.billing) as normalized_billing
     from order_list o
-    where p_page_ids is null or o.page_id = any(p_page_ids)
+    where (p_page_ids is null or o.page_id = any(p_page_ids))
+      and nullif(trim(coalesce(o.phone, '')), '') is not null
+      and nullif(trim(coalesce(o.address, '')), '') is not null
+      and nullif(trim(coalesce(o."order", '')), '') is not null
+      and nullif(trim(coalesce(o.billing, '')), '') is not null
   ),
   ranked as (
     select

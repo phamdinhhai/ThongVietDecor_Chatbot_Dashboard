@@ -20,7 +20,7 @@ export type Kpis = {
 };
 
 type TabIconName = 'overview' | 'customers' | 'orders';
-type MetricIconName = 'customers' | 'orders' | 'revenue' | 'conversion' | 'product' | 'dedupe';
+type MetricIconName = 'customers' | 'orders' | 'revenue' | 'conversion' | 'product';
 
 const REFRESH_MS = 60_000;
 
@@ -72,14 +72,6 @@ function MetricIcon({ name }: { name: MetricIconName }) {
         <>
           <path d="M12 3.8 19 7.7v8.6l-7 3.9-7-3.9V7.7l7-3.9Z" />
           <path d="M5.4 8 12 11.8 18.6 8M12 11.8v8" />
-        </>
-      )}
-      {name === 'dedupe' && (
-        <>
-          <circle cx="8" cy="8" r="3" />
-          <circle cx="16" cy="16" r="3" />
-          <path d="M11.2 8h2.6A2.2 2.2 0 0 1 16 10.2V13" />
-          <path d="M12.8 16h-2.6A2.2 2.2 0 0 1 8 13.8V11" />
         </>
       )}
     </svg>
@@ -137,7 +129,7 @@ export function DashboardClient({ initialData }: { initialData: Kpis }) {
         </div>
       </section>
 
-      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
         <KpiCard
           label="Tổng khách hàng"
           value={data.customer.total.toLocaleString('vi-VN')}
@@ -169,16 +161,9 @@ export function DashboardClient({ initialData }: { initialData: Kpis }) {
         <KpiCard
           label="Sản phẩm hot"
           value={topProduct?.label ?? '—'}
-          hint={topProduct ? `${topProduct.value.toLocaleString('vi-VN')} lượt đặt sau khi lọc trùng` : 'Chưa có dữ liệu'}
+          hint={topProduct ? `${topProduct.value.toLocaleString('vi-VN')} sản phẩm đã đặt` : 'Chưa có dữ liệu'}
           tone="sky"
           icon={<MetricIcon name="product" />}
-        />
-        <KpiCard
-          label="Dữ liệu trùng đã loại"
-          value={data.analytics.quality.duplicateOrderRowsRemoved.toLocaleString('vi-VN')}
-          hint={`${data.analytics.quality.duplicateChatRowsRemoved.toLocaleString('vi-VN')} tin nhắn trùng · ${data.revenue.duplicateRowsRemoved.toLocaleString('vi-VN')} dòng order trùng KPI`}
-          tone="rose"
-          icon={<MetricIcon name="dedupe" />}
         />
       </section>
 
