@@ -55,11 +55,36 @@ as $$
     where p_page_ids is null or "Page id" = any(p_page_ids)
     order by "Customer id", "Page id", id desc
   ),
+  valid_orders as (
+    select distinct on (
+      case
+        when nullif(trim(coalesce(o."ID Lọc", '')), '') is not null then 'idloc:' || trim(o."ID Lọc")
+        else 'fallback:' || coalesce(o.conversation_id, '') || '|' || coalesce(normalize_phone(o.phone), '') || '|' ||
+             lower(regexp_replace(coalesce(o.address, ''), '\s+', ' ', 'g')) || '|' ||
+             normalize_order_text(o."order") || '|' || normalize_vnd_amount(o.billing)::text
+      end
+    )
+      o.conversation_id
+    from order_list o
+    where (p_page_ids is null or o.page_id = any(p_page_ids))
+      and nullif(trim(coalesce(o.phone, '')), '') is not null
+      and nullif(trim(coalesce(o.address, '')), '') is not null
+      and nullif(trim(coalesce(o."order", '')), '') is not null
+      and nullif(trim(coalesce(o.billing, '')), '') is not null
+    order by
+      case
+        when nullif(trim(coalesce(o."ID Lọc", '')), '') is not null then 'idloc:' || trim(o."ID Lọc")
+        else 'fallback:' || coalesce(o.conversation_id, '') || '|' || coalesce(normalize_phone(o.phone), '') || '|' ||
+             lower(regexp_replace(coalesce(o.address, ''), '\s+', ' ', 'g')) || '|' ||
+             normalize_order_text(o."order") || '|' || normalize_vnd_amount(o.billing)::text
+      end,
+      o.id desc
+  ),
   state_agg as (
     select
       case
         when exists (
-          select 1 from order_list o
+          select 1 from valid_orders o
           where o.conversation_id = filtered.customer_id || '_' || filtered.page_id
         ) then 'Đã mua hàng'
         else 'Chưa mua hàng'
@@ -87,30 +112,40 @@ as $$
     order by session_id, page_id, "timestamp", coalesce(message, ''), id
   ),
   order_rows as (
-    select *
-    from order_list
-    where (p_page_ids is null or page_id = any(p_page_ids))
-      and nullif(trim(coalesce(phone, '')), '') is not null
-      and nullif(trim(coalesce(address, '')), '') is not null
-      and nullif(trim(coalesce("order", '')), '') is not null
-      and nullif(trim(coalesce(billing, '')), '') is not null
+    select
+      o.*,
+      normalize_phone(o.phone) as normalized_phone,
+      normalize_order_text(o."order") as normalized_order,
+      normalize_vnd_amount(o.billing) as normalized_billing,
+      lower(regexp_replace(coalesce(o.address, ''), '\s+', ' ', 'g')) as normalized_address,
+      case
+        when nullif(trim(coalesce(o."ID Lọc", '')), '') is not null then 'idloc:' || trim(o."ID Lọc")
+        else 'fallback:' || coalesce(o.conversation_id, '') || '|' || coalesce(normalize_phone(o.phone), '') || '|' ||
+             lower(regexp_replace(coalesce(o.address, ''), '\s+', ' ', 'g')) || '|' ||
+             normalize_order_text(o."order") || '|' || normalize_vnd_amount(o.billing)::text
+      end as canonical_order_key
+    from order_list o
+    where (p_page_ids is null or o.page_id = any(p_page_ids))
+      and nullif(trim(coalesce(o.phone, '')), '') is not null
+      and nullif(trim(coalesce(o.address, '')), '') is not null
+      and nullif(trim(coalesce(o."order", '')), '') is not null
+      and nullif(trim(coalesce(o.billing, '')), '') is not null
   ),
   order_dedup as (
-    select distinct on (
-      conversation_id,
-      normalize_phone(phone),
-      normalize_order_text("order"),
-      normalize_vnd_amount(billing)
-    )
-      *
+    select distinct on (canonical_order_key) *
     from order_rows
-    order by conversation_id, normalize_phone(phone), normalize_order_text("order"), normalize_vnd_amount(billing),
+    order by canonical_order_key,
              case when "ID Lọc" is null or trim("ID Lọc") = '' then 1 else 0 end,
+             length(coalesce(address, '')) desc,
              id desc
   ),
-  chat_by_day as (
-    select to_char(date_trunc('day', "timestamp"), 'YYYY-MM-DD') as label, count(*) as value
-    from chats
+  lead_by_day as (
+    select to_char(date_trunc('day', first_message_at), 'YYYY-MM-DD') as label, count(*) as value
+    from (
+      select session_id, page_id, min("timestamp") as first_message_at
+      from chats
+      group by session_id, page_id
+    ) first_leads
     group by 1
     order by 1
   ),
@@ -200,7 +235,7 @@ as $$
   ),
   top_products as (
     select
-      pc.code || ' · ' || pc.name as label,
+      pc.code as label,
       sum(pm.quantity)::bigint as value
     from product_matches pm
     join product_catalog pc on pc.code = pm.code
@@ -217,7 +252,7 @@ as $$
     from order_dedup
   )
   select jsonb_build_object(
-    'chatByDay', coalesce((select jsonb_agg(jsonb_build_object('label', label, 'value', value)) from chat_by_day), '[]'::jsonb),
+    'chatByDay', coalesce((select jsonb_agg(jsonb_build_object('label', label, 'value', value)) from lead_by_day), '[]'::jsonb),
     'chatByHour', coalesce((select jsonb_agg(jsonb_build_object('label', label, 'value', value)) from chat_by_hour), '[]'::jsonb),
     'chatByWeekday', coalesce((select jsonb_agg(jsonb_build_object('label', label, 'value', value)) from chat_by_weekday), '[]'::jsonb),
     'topProducts', coalesce((select jsonb_agg(jsonb_build_object('label', label, 'value', value)) from top_products), '[]'::jsonb),
@@ -245,7 +280,14 @@ as $$
       o.*,
       normalize_phone(o.phone) as normalized_phone,
       normalize_order_text(o."order") as normalized_order,
-      normalize_vnd_amount(o.billing) as normalized_billing
+      normalize_vnd_amount(o.billing) as normalized_billing,
+      lower(regexp_replace(coalesce(o.address, ''), '\s+', ' ', 'g')) as normalized_address,
+      case
+        when nullif(trim(coalesce(o."ID Lọc", '')), '') is not null then 'idloc:' || trim(o."ID Lọc")
+        else 'fallback:' || coalesce(o.conversation_id, '') || '|' || coalesce(normalize_phone(o.phone), '') || '|' ||
+             lower(regexp_replace(coalesce(o.address, ''), '\s+', ' ', 'g')) || '|' ||
+             normalize_order_text(o."order") || '|' || normalize_vnd_amount(o.billing)::text
+      end as canonical_order_key
     from order_list o
     where (p_page_ids is null or o.page_id = any(p_page_ids))
       and nullif(trim(coalesce(o.phone, '')), '') is not null
@@ -257,7 +299,7 @@ as $$
     select
       f.*,
       row_number() over (
-        partition by conversation_id, normalized_phone, normalized_order, normalized_billing
+        partition by canonical_order_key
         order by case when "ID Lọc" is null or trim("ID Lọc") = '' then 1 else 0 end,
                  length(coalesce(address, '')) desc,
                  id desc
@@ -340,16 +382,30 @@ as $$
     order by session_id, page_id, "timestamp", coalesce(message, ''), id
   ),
   order_dedup as (
-    select distinct on (conversation_id, normalize_phone(phone), normalize_order_text("order"), normalize_vnd_amount(billing))
+    select distinct on (
+      case
+        when nullif(trim(coalesce("ID Lọc", '')), '') is not null then 'idloc:' || trim("ID Lọc")
+        else 'fallback:' || coalesce(conversation_id, '') || '|' || coalesce(normalize_phone(phone), '') || '|' ||
+             lower(regexp_replace(coalesce(address, ''), '\s+', ' ', 'g')) || '|' ||
+             normalize_order_text("order") || '|' || normalize_vnd_amount(billing)::text
+      end
+    )
       conversation_id, phone, id
     from order_list
-    where nullif(trim(coalesce(phone, '')), '') is not null
+    where (p_page_ids is null or page_id = any(p_page_ids))
+      and nullif(trim(coalesce(phone, '')), '') is not null
       and nullif(trim(coalesce(address, '')), '') is not null
       and nullif(trim(coalesce("order", '')), '') is not null
       and nullif(trim(coalesce(billing, '')), '') is not null
-    order by conversation_id, normalize_phone(phone), normalize_order_text("order"), normalize_vnd_amount(billing),
-             case when "ID Lọc" is null or trim("ID Lọc") = '' then 1 else 0 end,
-             id desc
+    order by
+      case
+        when nullif(trim(coalesce("ID Lọc", '')), '') is not null then 'idloc:' || trim("ID Lọc")
+        else 'fallback:' || coalesce(conversation_id, '') || '|' || coalesce(normalize_phone(phone), '') || '|' ||
+             lower(regexp_replace(coalesce(address, ''), '\s+', ' ', 'g')) || '|' ||
+             normalize_order_text("order") || '|' || normalize_vnd_amount(billing)::text
+      end,
+      case when "ID Lọc" is null or trim("ID Lọc") = '' then 1 else 0 end,
+      id desc
   ),
   enriched as (
     select
@@ -419,7 +475,14 @@ as $$
       o.*,
       normalize_phone(o.phone) as normalized_phone,
       normalize_order_text(o."order") as normalized_order,
-      normalize_vnd_amount(o.billing) as normalized_billing
+      normalize_vnd_amount(o.billing) as normalized_billing,
+      lower(regexp_replace(coalesce(o.address, ''), '\s+', ' ', 'g')) as normalized_address,
+      case
+        when nullif(trim(coalesce(o."ID Lọc", '')), '') is not null then 'idloc:' || trim(o."ID Lọc")
+        else 'fallback:' || coalesce(o.conversation_id, '') || '|' || coalesce(normalize_phone(o.phone), '') || '|' ||
+             lower(regexp_replace(coalesce(o.address, ''), '\s+', ' ', 'g')) || '|' ||
+             normalize_order_text(o."order") || '|' || normalize_vnd_amount(o.billing)::text
+      end as canonical_order_key
     from order_list o
     where (p_page_ids is null or o.page_id = any(p_page_ids))
       and nullif(trim(coalesce(o.phone, '')), '') is not null
@@ -431,12 +494,12 @@ as $$
     select
       f.*,
       row_number() over (
-        partition by conversation_id, normalized_phone, normalized_order, normalized_billing
+        partition by canonical_order_key
         order by case when "ID Lọc" is null or trim("ID Lọc") = '' then 1 else 0 end,
                  length(coalesce(address, '')) desc,
                  id desc
       ) as dup_rank,
-      count(*) over (partition by conversation_id, normalized_phone, normalized_order, normalized_billing) as duplicate_count
+      count(*) over (partition by canonical_order_key) as duplicate_count
     from filtered f
   ),
   deduped as (
@@ -445,7 +508,7 @@ as $$
   enriched as (
     select
       d.id as source_id,
-      d.conversation_id || '::' || coalesce(d.normalized_phone, '') || '::' || d.normalized_order || '::' || d.normalized_billing::text as order_key,
+      d.canonical_order_key as order_key,
       d.name,
       d.normalized_phone as phone,
       d.address,

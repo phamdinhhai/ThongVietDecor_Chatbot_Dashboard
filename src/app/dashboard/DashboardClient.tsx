@@ -28,6 +28,12 @@ function formatVnd(value: number): string {
   return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(value);
 }
 
+function formatCompactVnd(value: number): string {
+  if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toLocaleString('vi-VN', { maximumFractionDigits: 1 })} tỷ đ`;
+  if (value >= 1_000_000) return `${(value / 1_000_000).toLocaleString('vi-VN', { maximumFractionDigits: 1 })} triệu đ`;
+  return formatVnd(value);
+}
+
 function MetricIcon({ name }: { name: MetricIconName }) {
   const baseProps = {
     className: 'h-5 w-5',
@@ -146,7 +152,7 @@ export function DashboardClient({ initialData }: { initialData: Kpis }) {
         />
         <KpiCard
           label="Doanh thu"
-          value={formatVnd(data.revenue.totalRevenue)}
+          value={formatCompactVnd(data.revenue.totalRevenue)}
           hint={`Giá trị trung bình ${formatVnd(avgRevenue)} / đơn`}
           tone="amber"
           icon={<MetricIcon name="revenue" />}
@@ -169,7 +175,7 @@ export function DashboardClient({ initialData }: { initialData: Kpis }) {
 
       <section className="grid grid-cols-1 gap-4 xl:grid-cols-3">
         <div className="xl:col-span-2">
-          <ChartCard title="Tin nhắn theo ngày" subtitle="Số tin nhắn đã lọc trùng theo từng ngày">
+          <ChartCard title="Số lead theo ngày" subtitle="Mỗi lead được tính theo ngày đầu tiên khách nhắn tới">
             <ChatByDayChart data={data.analytics.chatByDay} />
           </ChartCard>
         </div>

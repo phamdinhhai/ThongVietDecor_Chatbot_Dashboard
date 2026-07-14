@@ -19,22 +19,23 @@ const toneClasses = {
 
 export function KpiCard({ label, value, hint, icon, tone = 'brand' }: KpiCardProps) {
   return (
-    <article className="card card-hover min-h-[148px] p-5 animate-fade-in">
-      <div className="flex h-full flex-col justify-between gap-4">
-        <div className="flex items-start justify-between gap-4">
+    <article className="group relative min-h-[132px] overflow-hidden rounded-[1.35rem] border border-white/70 bg-white/90 p-4 shadow-[0_14px_38px_-28px_rgba(15,23,42,0.45)] ring-1 ring-surface-200/70 backdrop-blur transition-all duration-300 hover:-translate-y-0.5 hover:shadow-[0_22px_50px_-30px_rgba(15,23,42,0.55)] sm:p-5">
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-brand-400 via-sky-400 to-emerald-400 opacity-70" />
+      <div className="flex h-full flex-col justify-between gap-3">
+        <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-surface-500">{label}</p>
-            <p className="mt-2 break-words text-[clamp(1.35rem,2vw,1.875rem)] font-bold leading-tight text-surface-950" title={value}>
+            <p className="text-[0.68rem] font-bold uppercase tracking-[0.16em] text-surface-500">{label}</p>
+            <p className="mt-2 truncate text-[clamp(1.45rem,2.3vw,2rem)] font-black leading-[1.05] tracking-tight text-surface-950" title={value}>
               {value}
             </p>
           </div>
-          <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ring-1 ${toneClasses[tone]}`}>
+          <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl ring-1 shadow-sm transition-transform duration-300 group-hover:scale-105 ${toneClasses[tone]}`}>
             {icon}
           </div>
         </div>
 
         {hint && (
-          <p className="text-sm leading-relaxed text-surface-500">
+          <p className="line-clamp-2 text-[0.78rem] leading-5 text-surface-500" title={hint}>
             {hint}
           </p>
         )}

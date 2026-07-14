@@ -95,7 +95,7 @@ export function TopProductsChart({ data }: { data: ChartPoint[] }) {
           stroke={AXIS_COLOR}
           tickLine={false}
           axisLine={false}
-          width={150}
+          width={96}
           tick={{ textAnchor: 'end' }}
         />
         <Tooltip contentStyle={TOOLTIP_STYLE} cursor={{ fill: '#f8fafc' }} />
