@@ -25,7 +25,7 @@ export function KpiCard({ label, value, hint, icon, tone = 'brand' }: KpiCardPro
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <p className="text-[0.68rem] font-bold uppercase tracking-[0.16em] text-surface-500">{label}</p>
-            <p className="mt-2 truncate text-[clamp(1.45rem,2.3vw,2rem)] font-black leading-[1.05] tracking-tight text-surface-950" title={value}>
+            <p className="mt-2 whitespace-nowrap text-[clamp(1.28rem,1.85vw,1.85rem)] font-black leading-[1.05] tracking-tight text-surface-950" title={value}>
               {value}
             </p>
           </div>

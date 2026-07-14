@@ -1,9 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { KpiCard } from './KpiCard';
-import { StateBreakdownChart } from './StateBreakdownChart';
-import { ChatByDayChart, ChatByHourChart, ChatByWeekdayChart, TopProductsChart } from './AnalyticsCharts';
+import { ChatByDayChart, TopProductsChart } from './AnalyticsCharts';
 import type { AnalyticsData } from '@/lib/queries';
 
 export type Kpis = {
@@ -20,7 +19,7 @@ export type Kpis = {
 };
 
 type TabIconName = 'overview' | 'customers' | 'orders';
-type MetricIconName = 'customers' | 'orders' | 'revenue' | 'conversion' | 'product';
+type MetricIconName = 'customers' | 'orders' | 'revenue' | 'conversion';
 
 const REFRESH_MS = 60_000;
 
@@ -28,11 +27,6 @@ function formatVnd(value: number): string {
   return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND', maximumFractionDigits: 0 }).format(value);
 }
 
-function formatCompactVnd(value: number): string {
-  if (value >= 1_000_000_000) return `${(value / 1_000_000_000).toLocaleString('vi-VN', { maximumFractionDigits: 1 })} tỷ đ`;
-  if (value >= 1_000_000) return `${(value / 1_000_000).toLocaleString('vi-VN', { maximumFractionDigits: 1 })} triệu đ`;
-  return formatVnd(value);
-}
 
 function MetricIcon({ name }: { name: MetricIconName }) {
   const baseProps = {
@@ -74,12 +68,6 @@ function MetricIcon({ name }: { name: MetricIconName }) {
           <path d="M9 5h6" />
         </>
       )}
-      {name === 'product' && (
-        <>
-          <path d="M12 3.8 19 7.7v8.6l-7 3.9-7-3.9V7.7l7-3.9Z" />
-          <path d="M5.4 8 12 11.8 18.6 8M12 11.8v8" />
-        </>
-      )}
     </svg>
   );
 }
@@ -115,7 +103,6 @@ export function DashboardClient({ initialData }: { initialData: Kpis }) {
     return () => clearInterval(interval);
   }, []);
 
-  const topProduct = useMemo(() => data.analytics.topProducts?.[0], [data.analytics.topProducts]);
   const avgRevenue = data.revenue.totalOrders > 0 ? data.revenue.totalRevenue / data.revenue.totalOrders : 0;
 
   return (
@@ -135,7 +122,7 @@ export function DashboardClient({ initialData }: { initialData: Kpis }) {
         </div>
       </section>
 
-      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KpiCard
           label="Tổng khách hàng"
           value={data.customer.total.toLocaleString('vi-VN')}
@@ -146,13 +133,13 @@ export function DashboardClient({ initialData }: { initialData: Kpis }) {
         <KpiCard
           label="Tổng đơn hàng"
           value={data.revenue.totalOrders.toLocaleString('vi-VN')}
-          hint={`${data.revenue.ordersNeedingVerification.toLocaleString('vi-VN')} đơn cần xác minh · ${data.revenue.ordersCollapsedAsRevision.toLocaleString('vi-VN')} đơn sửa đã gộp`}
+          hint="Đơn hợp lệ đã lọc trùng"
           tone="emerald"
           icon={<MetricIcon name="orders" />}
         />
         <KpiCard
           label="Doanh thu"
-          value={formatCompactVnd(data.revenue.totalRevenue)}
+          value={formatVnd(data.revenue.totalRevenue)}
           hint={`Giá trị trung bình ${formatVnd(avgRevenue)} / đơn`}
           tone="amber"
           icon={<MetricIcon name="revenue" />}
@@ -164,13 +151,6 @@ export function DashboardClient({ initialData }: { initialData: Kpis }) {
           tone="violet"
           icon={<MetricIcon name="conversion" />}
         />
-        <KpiCard
-          label="Sản phẩm hot"
-          value={topProduct?.label ?? '—'}
-          hint={topProduct ? `${topProduct.value.toLocaleString('vi-VN')} sản phẩm đã đặt` : 'Chưa có dữ liệu'}
-          tone="sky"
-          icon={<MetricIcon name="product" />}
-        />
       </section>
 
       <section className="grid grid-cols-1 gap-4 xl:grid-cols-3">
@@ -181,18 +161,6 @@ export function DashboardClient({ initialData }: { initialData: Kpis }) {
         </div>
         <ChartCard title="Sản phẩm đặt nhiều" subtitle="Top sản phẩm sau khi lọc đơn trùng">
           <TopProductsChart data={data.analytics.topProducts} />
-        </ChartCard>
-      </section>
-
-      <section className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <ChartCard title="Tin nhắn theo giờ" subtitle="Phân bổ trong ngày">
-          <ChatByHourChart data={data.analytics.chatByHour} />
-        </ChartCard>
-        <ChartCard title="Tin nhắn theo thứ" subtitle="Phân bổ trong tuần">
-          <ChatByWeekdayChart data={data.analytics.chatByWeekday} />
-        </ChartCard>
-        <ChartCard title="Trạng thái khách hàng" subtitle="Mua hàng so với chưa mua">
-          <StateBreakdownChart data={data.customer.stateBreakdown} />
         </ChartCard>
       </section>
     </div>
