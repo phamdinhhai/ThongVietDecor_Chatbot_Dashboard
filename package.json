@@ -6,7 +6,8 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "test:meta-ads": "node --experimental-strip-types --test src/lib/meta-ads/metrics.test.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.5.2",

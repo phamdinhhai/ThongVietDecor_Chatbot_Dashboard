@@ -19,13 +19,14 @@ Dashboard đa khách hàng cho dữ liệu chatbot trên Supabase. Mỗi đơn v
   dữ liệu mẫu mô phỏng đúng ca thật (đơn nhiều sản phẩm + dòng `ID Lọc` NULL) — kết quả khớp tay.
   Lý do đổi: cách cũ (fetch toàn bộ `order_list`/`fb_chats` mỗi 60s rồi tính trong JS) sẽ chậm dần
   và tốn băng thông khi 2 bảng này lớn lên; đẩy xuống DB thì mỗi lần refresh chỉ trả về vài con số.
-- **3 tab trên dashboard** (`DashboardTabs.tsx`): Tổng quan (KPI, như trên) | Khách hàng | Đơn hàng.
-  2 tab sau là bảng dữ liệu thô có tìm kiếm (debounce 300ms) + phân trang 25 dòng/trang, gọi
+- **4 tab trên dashboard** (`DashboardTabs.tsx`): Tổng quan | Quảng cáo | Khách hàng | Đơn hàng.
+  Tab Quảng cáo chỉ mount và gọi `/api/ads/performance` khi người dùng mở tab; không làm chậm Overview.
+  Dữ liệu Ads được đọc từ facts/snapshots trong Supabase, không gọi Meta trực tiếp từ browser.
+  Hai tab Khách hàng/Đơn hàng có tìm kiếm (debounce 300ms) + phân trang 25 dòng/trang, gọi
   `/api/table/customers` và `/api/table/orders` (lọc theo `page_id` giống hệt logic KPI).
-  Cột hiển thị đã lược bớt các cột nội bộ không cần cho người dùng cuối (id, `Customer id`,
-  `event_mark`, `spam_check`, `spam_mark_root`, `thread_id`, `n_spam_time` bên `customer_data`;
-  `id` nội bộ bên `order_list`). Cột `Page` chỉ hiện với `super_admin`. Muốn đổi cột hiển thị, sửa
-  `CUSTOMER_BASE_COLUMNS`/`ORDER_BASE_COLUMNS` trong `DashboardTabs.tsx`.
+  Cột hiển thị đã lược bớt các cột nội bộ không cần cho người dùng cuối. Cột `Page` chỉ hiện với
+  `super_admin`. Muốn đổi cột hiển thị, sửa `CUSTOMER_COLUMNS`/`ORDER_COLUMNS` trong
+  `DashboardTabs.tsx`.
 
 ## Setup
 
@@ -39,6 +40,8 @@ Chạy migration control-plane trong Supabase SQL Editor (theo đúng thứ tự
 supabase/migrations/001_dashboard_control_plane.sql
 supabase/migrations/002_kpi_rpc_functions.sql
 supabase/migrations/003_fix_cumulative_and_duplicate_orders.sql
+supabase/migrations/004_dashboard_analytics_and_lists.sql
+supabase/migrations/005_meta_ads_reporting.sql
 ```
 
 Tạo tenant + gán page_id (ví dụ, chạy trong SQL Editor hoặc Table Editor):
@@ -61,11 +64,60 @@ Chạy local:
 npm run dev
 ```
 
+## Meta Ads setup
+
+Các biến dưới đây là **server-only**, không được dùng tiền tố `NEXT_PUBLIC_`:
+
+```env
+META_GRAPH_API_VERSION=vXX.X
+META_SYSTEM_USER_ACCESS_TOKEN=<system-user-token>
+META_SYNC_CRON_SECRET=<random-secret-dai>
+SUPABASE_URL=<supabase-project-url>
+SUPABASE_SERVICE_ROLE_KEY=<service-role-key>
+```
+
+`META_GRAPH_API_VERSION` không có fallback. Phải chốt version sau connectivity test và one-day
+Insights reconciliation theo `meta_ads_document/08_operations_runbook.md`.
+
+Full sync tự gọi paginated `GET /me/adaccounts`, lấy toàn bộ account mà System User token đang có
+quyền, rồi tự upsert name/currency/timezone/status/business ID vào `meta_ad_accounts`. Không cần seed
+account bằng SQL. Vì Meta không biết `dashboard_tenants`, cơ chế này chỉ hoạt động khi database có
+**đúng một tenant**; 0 hoặc nhiều tenant sẽ trả `AUTO_DISCOVERY_REQUIRES_SINGLE_TENANT` và không sync.
+Token phải chỉ được assign đúng các account được phép hiển thị cho tenant đó.
+
+Account mới giữ primary result chưa cấu hình. UI không publish KPI “Results” suy đoán; Lead, Purchase
+và Messaging started vẫn được hiển thị riêng.
+
+Đồng bộ rolling 7 ngày bằng request server-to-server:
+
+```text
+GET /api/ads/sync
+Authorization: Bearer <META_SYNC_CRON_SECRET>
+```
+
+Manual full sync chỉ dành cho `super_admin` qua `POST /api/ads/sync`. Manual backfill account cụ thể
+chỉ nhận account đã được auto-discovery đăng ký. Cấu hình Vercel phải hỗ trợ function duration 300 giây
+trước khi bật cron nhiều account.
+
+## Verification
+
+```bash
+npm run test:meta-ads
+npx tsc --noEmit
+npm run build
+```
+
+`npm run lint` hiện sẽ mở wizard vì repository cũ chưa có ESLint config; production build vẫn chạy
+Next.js type/lint validation và phải pass trước release.
+
 ## Deploy lên Vercel
 
 1. Push repo này lên GitHub.
-2. Import vào Vercel, thêm 4 biến môi trường trong `.env.example` vào Vercel Project Settings > Environment Variables.
-3. Deploy — Next.js App Router chạy trực tiếp trên Vercel không cần cấu hình thêm.
+2. Import vào Vercel và thêm toàn bộ biến Supabase + Meta ở trên vào Project Settings > Environment Variables.
+3. Chạy migration `005_meta_ads_reporting.sql` và xác nhận database có đúng một tenant.
+4. Chạy full sync một ngày/rolling sync để auto-discover account; kiểm tra inventory trước khi dùng UI.
+5. Đối soát Spend, Impressions, Clicks, Inline link clicks, actions và exact-level Reach với Ads Manager.
+6. Chỉ bật cron rolling sync sau khi reconciliation được ký duyệt.
 
 ## ✅ Đã xác nhận từ dữ liệu thật
 
