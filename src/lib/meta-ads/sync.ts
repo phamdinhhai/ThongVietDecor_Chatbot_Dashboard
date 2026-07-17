@@ -14,7 +14,6 @@ import {
 
 type AccountMeta = {
   id: string; name: string; currency?: string; timezone_name?: string; account_status?: number;
-  business?: { id?: string };
 };
 type CreativeRef = { id?: string };
 type MetaDimension = {
@@ -88,7 +87,7 @@ export async function discoverAndRegisterMetaAdAccounts(): Promise<string[]> {
   }
 
   const accounts = await fetchAllPages<AccountMeta>('me/adaccounts', {
-    fields: 'id,name,currency,timezone_name,account_status,business',
+    fields: 'id,name,currency,timezone_name,account_status',
   });
   const normalized = accounts.map((account) => ({
     ...account,
@@ -110,7 +109,6 @@ export async function discoverAndRegisterMetaAdAccounts(): Promise<string[]> {
       currency: account.currency,
       timezone_name: account.timezone_name ?? null,
       account_status: account.account_status ?? null,
-      business_id: account.business?.id ?? null,
       active: true,
       updated_at: now,
     })),
